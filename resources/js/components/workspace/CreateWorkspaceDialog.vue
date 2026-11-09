@@ -28,6 +28,7 @@ const open = defineModel<boolean>('open', { default: false });
 
 type Movable = {
     trial: boolean;
+    selfHosted?: boolean;
     limit: number | null;
     workspaces: {
         name: string;
@@ -89,11 +90,15 @@ function toggle(id: number, on: boolean): void {
                 }}</DialogTitle>
                 <DialogDescription class="text-[13px]/5">
                     {{
-                        $t(
-                            'Workspaces keep machines, people and billing separate, e.g. one per client or company.',
-                        )
+                        movable?.selfHosted
+                            ? $t(
+                                  'Workspaces keep machines and people separate, e.g. one per client or company.',
+                              )
+                            : $t(
+                                  'Workspaces keep machines, people and billing separate, e.g. one per client or company.',
+                              )
                     }}
-                    <template v-if="movable">
+                    <template v-if="movable && !movable.selfHosted">
                         {{
                             ' ' +
                             (movable.trial
@@ -173,7 +178,13 @@ function toggle(id: number, on: boolean): void {
                                     'They leave their current workspace with their services, monitors, backups and history. Nothing on the server changes.',
                                 )
                             }}
-                            <template v-if="movable && !movable.trial">
+                            <template
+                                v-if="
+                                    movable &&
+                                    !movable.trial &&
+                                    !movable.selfHosted
+                                "
+                            >
                                 {{
                                     ' ' +
                                     $t(

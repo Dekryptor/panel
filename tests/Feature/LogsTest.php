@@ -322,6 +322,27 @@ test('admin stats list the workspaces sending the most log lines', function () {
     ]]);
 });
 
+test('admin stats rank workspaces by their lines, name each one’s busiest service, and use no word MySQL reserves', function () {
+    [$quiet, $quietMachine] = logsMachine();
+    [$busy, $busyMachine] = logsMachine();
+    shipLogs($quietMachine, [logLine('a')]);
+    shipLogs($busyMachine, [
+        logLine('a', ['service' => 'systemd:nginx.service', 'name' => 'nginx.service']),
+        logLine('b', ['service' => 'systemd:nginx.service', 'name' => 'nginx.service']),
+        logLine('c', ['service' => 'systemd:nginx.service', 'name' => 'nginx.service']),
+        logLine('d'),
+    ]);
+
+    DB::connection()->enableQueryLog();
+    $rows = LogVolume::summary()['rows'];
+    $sql = collect(DB::connection()->getQueryLog())->pluck('query')->implode("\n");
+
+    expect(collect($rows)->map(fn (array $row) => [$row['id'], $row['lines'], $row['top'], $row['topLines']])->all())
+        ->toBe([[$busy->id, 4, 'nginx.service', 3], [$quiet->id, 1, 'umami-umami-1', 1]])
+        ->and($sql)->toContain('log_counts')
+        ->and(preg_match('/\bas\s+[`"]?lines\b/i', $sql))->toBe(0);
+});
+
 test('logs:relevel moves journald lines stored as info to the level they show', function () {
     [, $machine] = logsMachine();
     $at = now()->startOfMinute()->getTimestampMs();

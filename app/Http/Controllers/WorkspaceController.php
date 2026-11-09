@@ -9,6 +9,7 @@ use App\Models\Machine;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Audit\Audited;
+use App\Support\Edition;
 use App\Support\Machines\MovableMachines;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -67,6 +68,7 @@ class WorkspaceController extends Controller
                         'services' => (int) $machine->services_count,
                     ])->values(),
                 ])->values(),
+            ...(Edition::selfHosted() ? ['selfHosted' => true] : []),
         ]);
     }
 

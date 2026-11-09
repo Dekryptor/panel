@@ -654,7 +654,7 @@ test('a machine page takes a page title, an icon and a favicon of its own', func
     $response = $this->get('/status/web-one')->assertOk()->assertInertia(fn (Assert $p) => $p
         ->where('status.title', 'Acme status')
         ->where('pageTitle', 'Acme | Status')
-        ->where('brand.logoUrl', $page->iconUrl())
+        ->where('statusBrand.logoUrl', $page->iconUrl())
         ->where('favicon', $page->faviconUrl()));
     expect($response->getContent())
         ->toContain('<link rel="icon" href="'.$page->faviconUrl().'">')
@@ -667,7 +667,7 @@ test('a machine page takes a page title, an icon and a favicon of its own', func
     Storage::disk('public')->assertMissing($page->favicon_path);
     auth()->logout();
     $this->get('/status/web-one')->assertInertia(fn (Assert $p) => $p
-        ->where('brand.logoUrl', null)
+        ->where('statusBrand.logoUrl', null)
         ->where('favicon', null));
 });
 

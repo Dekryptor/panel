@@ -7,6 +7,7 @@ use App\Enums\WorkspaceRole;
 use App\Mcp\McpContext;
 use App\Mcp\Tool;
 use App\Models\WorkspaceCustomRole;
+use App\Support\Edition;
 
 final class ListRoles extends Tool
 {
@@ -46,7 +47,7 @@ final class ListRoles extends Tool
             'value' => $role->value,
             'label' => $role->label(),
             'description' => $role->description(),
-            'permissions' => array_map($permission, $role->permissions()),
+            'permissions' => array_values(array_map($permission, array_filter($role->permissions(), fn (WorkspacePermission $p) => in_array($p, WorkspacePermission::offered(), true)))),
             'assignable' => $role !== WorkspaceRole::Owner,
             'available' => $role === WorkspaceRole::Owner || ! $role->isStaffRole() || $hasStaff,
             'members' => (int) ($builtInCounts[$role->value] ?? 0),
@@ -69,9 +70,11 @@ final class ListRoles extends Tool
         if (! $hasStaff) {
             $notes[] = 'Member and Viewer roles are on Pro and Business. On this plan, people join as Admins.';
         }
-        $notes[] = $hasCustom
-            ? 'Custom roles replace the base role’s permissions. If the workspace leaves Business, people with them become Viewers.'
-            : 'Custom roles are on Business.'.($customRoles === [] ? '' : ' The ones listed are kept, but not in use: people given them have Viewer access.');
+        $notes[] = match (true) {
+            $hasCustom && Edition::selfHosted() => 'Custom roles replace the base role’s permissions. If the workspace’s license is removed, people with them become Viewers.',
+            $hasCustom => 'Custom roles replace the base role’s permissions. If the workspace leaves Business, people with them become Viewers.',
+            default => (Edition::selfHosted() ? 'Custom roles need a ServerOS license (Settings › License).' : 'Custom roles are on Business.').($customRoles === [] ? '' : ' The ones listed are kept, but not in use: people given them have Viewer access.'),
+        };
 
         $yours = $workspace->roleOf($context->user) ?? WorkspaceRole::Viewer;
 
@@ -80,7 +83,7 @@ final class ListRoles extends Tool
             'customRoles' => $customRoles,
             'hasStaffRoles' => $hasStaff,
             'hasCustomRoles' => $hasCustom,
-            'permissions' => array_map($permission, WorkspacePermission::cases()),
+            'permissions' => array_map($permission, WorkspacePermission::offered()),
             'you' => [
                 'role' => $yours->value,
                 'roleLabel' => Team::label($yours, $workspace->customRoleOf($context->user)),

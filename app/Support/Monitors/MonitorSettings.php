@@ -4,6 +4,7 @@ namespace App\Support\Monitors;
 
 use App\Models\Monitor;
 use App\Models\Workspace;
+use App\Support\Edition;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -17,6 +18,10 @@ class MonitorSettings
         $limit = $workspace->monitorLimit();
         if ($workspace->monitors()->count() < $limit) {
             return null;
+        }
+
+        if (Edition::selfHosted()) {
+            return "This install allows {$limit} monitors per workspace. Remove one, or ask whoever runs this install to raise SERVEROS_SELF_HOSTED_MONITORS.";
         }
 
         return $limit === 0
@@ -51,7 +56,7 @@ class MonitorSettings
         ])->validate();
 
         if ($data['interval'] < $min) {
-            throw ValidationException::withMessages(['interval' => 'Your plan checks at most every '.($min >= 60 ? ($min / 60).' minutes' : "{$min} seconds").'.']);
+            throw ValidationException::withMessages(['interval' => (Edition::selfHosted() ? 'This install checks at most every ' : 'Your plan checks at most every ').($min >= 60 ? ($min / 60).' minutes' : "{$min} seconds").'.']);
         }
 
         $http = $data['type'] === 'http';

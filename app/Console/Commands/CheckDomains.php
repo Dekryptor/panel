@@ -15,11 +15,14 @@ class CheckDomains extends Command
 
     public function handle(CustomDomains $domains): int
     {
-        if (! Cloudflare::enabled()) {
+        $direct = CustomDomains::direct();
+        if (! Cloudflare::enabled() && ! $direct) {
             return self::SUCCESS;
         }
 
-        $pending = WorkspaceDomain::query()->where('state', 'pending')->whereNotNull('cloudflare_id')->get();
+        $pending = WorkspaceDomain::query()->where('state', 'pending')
+            ->when($direct, fn ($query) => $query->whereNull('cloudflare_id')->whereNotNull('hostname'), fn ($query) => $query->whereNotNull('cloudflare_id'))
+            ->get();
         foreach ($pending as $domain) {
             $age = $domain->created_at?->diffInMinutes(now()) ?? 0;
             $every = $age < 60 ? 1 : 10;
@@ -27,7 +30,7 @@ class CheckDomains extends Command
                 continue;
             }
             if ($age > 14 * 24 * 60) {
-                $domain->forceFill(['state' => 'failed', 'error' => 'Nothing pointed at ServerOS for two weeks. Check the DNS records and try again.'])->save();
+                $domain->forceFill(['state' => 'failed', 'error' => $direct ? 'Nothing pointed at this panel for two weeks. Check the DNS records and try again.' : 'Nothing pointed at ServerOS for two weeks. Check the DNS records and try again.'])->save();
                 CustomDomains::forget();
 
                 continue;

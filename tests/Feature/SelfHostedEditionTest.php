@@ -2,6 +2,8 @@
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Workspaces\CreateWorkspace;
+use App\Enums\BillingInterval;
+use App\Enums\Plan;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceDomain;
@@ -10,6 +12,7 @@ use App\Support\Entitlements\Entitlements;
 use App\Support\Entitlements\PlanEntitlements;
 use App\Support\Entitlements\SelfHostedEntitlements;
 use App\Support\Extensions\Extensions;
+use App\Support\Extensions\TrialCards;
 use App\Support\Extensions\UpgradeLink;
 use App\Support\SetupGuide;
 use Illuminate\Contracts\Cache\Lock;
@@ -145,6 +148,77 @@ test('the welcome flow has no plan step on a self-hosted install', function () {
     expect($workspace->fresh()->onboarded_at)->not->toBeNull();
 });
 
+function cardAlwaysNeeded(): void
+{
+    app()->instance(TrialCards::class, new class implements TrialCards
+    {
+        public function assign(User $owner): ?string
+        {
+            return 'card';
+        }
+
+        public function needsCard(Workspace $workspace): bool
+        {
+            return true;
+        }
+
+        public function trialDays(Workspace $workspace): int
+        {
+            return 7;
+        }
+
+        public function verifyPath(Workspace $workspace): ?string
+        {
+            return null;
+        }
+
+        public function checkout(Workspace $workspace, Plan $plan, BillingInterval $interval, User $by, string $returnUrl): string
+        {
+            return 'https://checkout.test';
+        }
+    });
+}
+
+test('skipping the welcome flow on a fresh self-hosted install opens the dashboard for good, whatever a card check says', function () {
+    selfHostedInstall();
+    cardAlwaysNeeded();
+    $this->withoutVite();
+
+    $this->post(route('register.store'), [
+        'name' => 'Ada Lovelace',
+        'email' => 'ada@example.com',
+        'password' => 'password',
+        'password_confirmation' => 'password',
+    ])->assertRedirect(route('dashboard', absolute: false));
+    $owner = User::query()->where('email', 'ada@example.com')->firstOrFail();
+    $workspace = $owner->ownedWorkspaces()->sole();
+
+    $this->actingAs($owner)->get(selfHostedUrl($workspace))->assertRedirect(selfHostedUrl($workspace, 'welcome'));
+    $this->actingAs($owner)->get(selfHostedUrl($workspace, 'welcome'))
+        ->assertInertia(fn (Assert $page) => $page->component('welcome/Welcome')->where('cardRequired', false));
+
+    $this->actingAs($owner)
+        ->post(selfHostedUrl($workspace, 'welcome/finish'), ['skipped_at' => 'about'])
+        ->assertRedirect(rtrim(selfHostedUrl($workspace), '/'));
+
+    expect($workspace->fresh()->onboarded_at)->not->toBeNull()
+        ->and($workspace->fresh()->welcome['skipped_at'])->toBe('about');
+    $this->actingAs($owner)->get(selfHostedUrl($workspace))
+        ->assertInertia(fn (Assert $page) => $page->component('workspace/Home'));
+    $this->actingAs($owner)->get(selfHostedUrl($workspace, 'welcome'))->assertRedirect(rtrim(selfHostedUrl($workspace), '/'));
+});
+
+test('on serveros.com a trial that needs a card still can’t skip the welcome flow', function () {
+    cardAlwaysNeeded();
+    $workspace = Workspace::factory()->welcoming()->create();
+
+    $this->actingAs($workspace->owner)
+        ->post(selfHostedUrl($workspace, 'welcome/finish'), ['skipped_at' => 'plan'])
+        ->assertRedirect(selfHostedUrl($workspace, 'welcome'));
+
+    expect($workspace->fresh()->onboarded_at)->toBeNull();
+});
+
 test('the dashboard asks for no plan on a self-hosted install', function () {
     $workspace = Workspace::factory()->create();
     $guideGroups = fn () => collect(SetupGuide::for($workspace, $workspace->owner)['groups'] ?? [])->pluck('key')->all();
@@ -171,16 +245,13 @@ test('the dashboard asks for no plan on a self-hosted install', function () {
     expect($guideGroups())->not->toContain('plan')->toContain('connect');
 });
 
-test('Seline analytics are only there in production with a project token', function () {
-    $seline = '<script async src="/vendor/seline.js" data-token="abc123"></script>';
+test('the panel itself never loads Seline, even in production with a token: only a package can, through a head tag', function () {
     app()->instance('env', 'production');
     config()->set('services.seline.token', 'abc123');
-
-    $this->get(route('login'))->assertOk()->assertSee($seline, false);
-
-    config()->set('services.seline.token', null);
+    app()->instance(Extensions::class, new Extensions);
 
     $this->get(route('login'))->assertOk()->assertDontSee('seline');
+    expect(file_get_contents(resource_path('views/app.blade.php')))->not->toContain('seline');
 });
 
 test('on serveros.com any subdomain may get a certificate, as before', function () {

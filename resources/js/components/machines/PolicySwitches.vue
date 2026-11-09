@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useSelfHosted } from '@/composables/useSelfHosted';
 import { computed } from 'vue';
 import ToggleSwitch from '@/components/workspace/ToggleSwitch.vue';
 import type {
@@ -7,6 +8,7 @@ import type {
     UpdateMode,
 } from '@/lib/machinePolicies';
 
+const selfHosted = useSelfHosted();
 const props = defineProps<{
     disabled?: boolean;
     releases?: string[];
@@ -94,9 +96,13 @@ const focusRing =
                 <div class="flex grow flex-col">
                     <span :class="title">{{ $t('Collect logs') }}</span>
                     <span :class="body">{{
-                        $t(
-                            'Searchable service logs, kept for your plan’s days.',
-                        )
+                        selfHosted
+                            ? $t(
+                                  'Searchable service logs, kept as long as this install keeps them.',
+                              )
+                            : $t(
+                                  'Searchable service logs, kept for your plan’s days.',
+                              )
                     }}</span>
                 </div>
                 <ToggleSwitch

@@ -62,7 +62,7 @@ class WorkspaceWelcomeController extends Controller
             ], Plan::cases()),
             'currency' => $currency->value,
             'trialDays' => Workspace::TRIAL_DAYS,
-            'cardRequired' => $this->cards->needsCard($workspace),
+            'cardRequired' => $this->needsCard($workspace),
             'cardTrialDays' => $this->cards->trialDays($workspace),
             'cardVerifyUrl' => $this->cards->verifyPath($workspace),
             'canConnect' => (bool) config('daemon.install_ready'),
@@ -183,7 +183,7 @@ class WorkspaceWelcomeController extends Controller
         abort_unless($workspace->owner_id === $request->user()->id, 403);
         $data = $request->validate(['skipped_at' => ['nullable', 'string', 'in:about,control,plan,connect']]);
 
-        if ($this->cards->needsCard($workspace)) {
+        if ($this->needsCard($workspace)) {
             return to_route('workspace.welcome.show', ['workspace' => $workspace->slug]);
         }
 
@@ -195,6 +195,11 @@ class WorkspaceWelcomeController extends Controller
         }
 
         return to_route('workspace.home', ['workspace' => $workspace->slug]);
+    }
+
+    private function needsCard(Workspace $workspace): bool
+    {
+        return ! Edition::selfHosted() && $this->cards->needsCard($workspace);
     }
 
     private function welcoming(Request $request, Workspace $workspace): bool

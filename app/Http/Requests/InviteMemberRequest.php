@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\WorkspaceRole;
 use App\Models\Workspace;
 use App\Models\WorkspaceCustomRole;
+use App\Support\Edition;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -54,7 +55,7 @@ class InviteMemberRequest extends FormRequest
 
                 if (str_starts_with($this->string('role')->toString(), 'custom:')) {
                     if (! $workspace->hasCustomRoles()) {
-                        $validator->errors()->add('role', 'Custom roles are on Business.');
+                        $validator->errors()->add('role', Edition::selfHosted() ? 'Custom roles need a ServerOS license.' : 'Custom roles are on Business.');
 
                         return;
                     }

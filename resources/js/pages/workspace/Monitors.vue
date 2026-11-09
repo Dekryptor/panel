@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useSelfHosted } from '@/composables/useSelfHosted';
 import { trans } from 'laravel-vue-i18n';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Plus, Search } from '@lucide/vue';
@@ -31,6 +32,7 @@ import type { Incident } from '@/components/status/IncidentDialog.vue';
 import { appButtonClasses } from '@/lib/appButton';
 import type { Workspace, WorkspaceAccess } from '@/types';
 
+const selfHosted = useSelfHosted();
 const props = defineProps<{
     workspace: Workspace;
     monitors: Monitor[];
@@ -309,9 +311,13 @@ const focusRing =
                 :disabled="full"
                 :title="
                     full
-                        ? $t('Your plan includes :limit monitors', {
-                              limit: String(limit),
-                          })
+                        ? selfHosted
+                            ? $t('This install allows :limit monitors', {
+                                  limit: String(limit),
+                              })
+                            : $t('Your plan includes :limit monitors', {
+                                  limit: String(limit),
+                              })
                         : undefined
                 "
                 @click="creating = true"
@@ -571,10 +577,15 @@ const focusRing =
 
             <p class="text-xs/4 text-(--ds-text-faint)">
                 {{
-                    $t(':length of :limit monitors on your plan.', {
-                        length: String(monitors.length ?? ''),
-                        limit: String(limit ?? ''),
-                    }) + ' '
+                    (selfHosted
+                        ? $t(':length of :limit monitors on this install.', {
+                              length: String(monitors.length ?? ''),
+                              limit: String(limit ?? ''),
+                          })
+                        : $t(':length of :limit monitors on your plan.', {
+                              length: String(monitors.length ?? ''),
+                              limit: String(limit ?? ''),
+                          })) + ' '
                 }}
             </p>
         </div>

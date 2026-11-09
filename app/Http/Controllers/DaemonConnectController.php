@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Machines\CreateJoinCommand;
+use App\Exceptions\MachineLimitReached;
 use App\Models\DaemonEnrolment;
 use App\Models\Machine;
 use App\Models\MachineGroup;
@@ -56,7 +57,7 @@ class DaemonConnectController extends Controller
         }
 
         if ($created === null) {
-            return response()->json(['error' => 'This workspace has reached its machine limit.'], 409);
+            return response()->json(['error' => MachineLimitReached::selfHostedMessage($workspace) ?? 'This workspace has reached its machine limit.'], 409);
         }
 
         return response()->json([

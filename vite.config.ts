@@ -26,13 +26,14 @@ function webFont(
     family: string,
     weights: number[],
     preload: number[] = [],
+    dir = 'resources/fonts/web',
 ): FontDefinition {
     const alias = family.toLowerCase().replaceAll(' ', '-');
 
     return local(family, {
         alias,
         variants: weights.map((weight) => ({
-            src: `resources/fonts/web/${alias}-${weight}.woff2`,
+            src: `${dir}/${alias}-${weight}.woff2`,
             weight,
         })),
         preload:
@@ -261,6 +262,35 @@ const packages = existsSync('vendor/serveroshq')
       )
     : [];
 
+const packageFonts = packages.flatMap((path) => {
+    const dir = `${path}/resources/fonts/web`;
+    const file = `${dir}/fonts.json`;
+    if (!existsSync(file)) {
+        return [];
+    }
+    const families = JSON.parse(readFileSync(file, 'utf8')) as Record<
+        string,
+        { weights: number[]; preload?: number[]; after?: string }
+    >;
+
+    return Object.entries(families).map(
+        ([family, { weights, preload, after }]) => ({
+            after,
+            font: webFont(family, weights, preload, dir),
+        }),
+    );
+});
+
+function withPackageFonts(own: FontDefinition[]): FontDefinition[] {
+    const fonts = [...own];
+    for (const { after, font } of packageFonts) {
+        const at = fonts.findIndex(({ family }) => family === after);
+        fonts.splice(at < 0 ? fonts.length : at + 1, 0, font);
+    }
+
+    return fonts;
+}
+
 const linkedPackages = packages
     .filter((path) => lstatSync(path).isSymbolicLink())
     .map((path) => realpathSync(path));
@@ -407,17 +437,14 @@ export default defineConfig({
             ],
             ssr: siteSsr,
             refresh: true,
-            fonts: [
+            fonts: withPackageFonts([
                 webFont('Instrument Sans', [400, 500, 600]),
-                webFont('Inter Tight', [300, 400], [300]),
                 webFont('Schibsted Grotesk', [400, 500]),
                 webFont('Cabin', [400, 500]),
                 webFont('Mona Sans', [400, 500, 600], [400, 500]),
                 webFont('Geist Mono', [400, 500]),
                 webFont('Inter', [400, 500, 600]),
-                webFont('Newsreader', [400, 500]),
-                webFont('Caveat', [500]),
-            ],
+            ]),
         }),
         packageStyles(),
         packageTranslations(),

@@ -45,9 +45,9 @@ class WorkspaceDomainController extends Controller
         return Inertia::render('workspace/settings/Domains', [
             'workspace' => $workspace->toPageProps(),
             'allowed' => $workspace->hasCustomDomains(),
-            'ready' => Cloudflare::enabled(),
+            'ready' => Cloudflare::enabled() || CustomDomains::direct(),
             'canChange' => $workspace->allows($request->user(), WorkspacePermission::ManageSettings),
-            'cnameTarget' => Cloudflare::cnameTarget(),
+            'cnameTarget' => CustomDomains::target(),
             'subdomain' => $workspace->subdomain(),
             'dashboard' => self::present($rows->get(WorkspaceDomain::DASHBOARD)),
             'status' => self::present($rows->get(WorkspaceDomain::STATUS)),
@@ -72,6 +72,7 @@ class WorkspaceDomainController extends Controller
             'goUrl' => route('workspace.domains.go', ['workspace' => $workspace->slug]),
             'docsUrl' => DocsUrl::page('guides', 'custom-domains'),
             'billingUrl' => app(Extensions::class)->upgradeUrl($workspace),
+            ...(CustomDomains::direct() ? ['direct' => true] : []),
         ]);
     }
 
@@ -226,7 +227,7 @@ class WorkspaceDomainController extends Controller
     {
         Gate::authorize('manageSettings', $workspace);
         if (! $workspace->hasCustomDomains()) {
-            throw ValidationException::withMessages(['hostname' => 'Your own domains come with Business.']);
+            throw ValidationException::withMessages(['hostname' => Edition::selfHosted() ? 'Your own domains need a ServerOS license.' : 'Your own domains come with Business.']);
         }
     }
 

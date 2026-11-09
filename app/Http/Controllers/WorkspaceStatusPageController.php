@@ -11,6 +11,7 @@ use App\Models\Workspace;
 use App\Models\WorkspaceStatusPage;
 use App\Support\Audit\AuditContext;
 use App\Support\Audit\Audited;
+use App\Support\Edition;
 use App\Support\StatusPages\FleetStatusReport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -115,7 +116,7 @@ class WorkspaceStatusPageController extends Controller
         ]);
 
         if ($data['enabled'] && ! $workspace->hasFleetStatusPage()) {
-            return back()->withErrors(['enabled' => 'One status page for every machine comes with Business.']);
+            return back()->withErrors(['enabled' => Edition::selfHosted() ? 'One status page for every machine needs a ServerOS license.' : 'One status page for every machine comes with Business.']);
         }
 
         $page->fill([

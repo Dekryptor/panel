@@ -2,6 +2,7 @@
 
 namespace App\Mcp;
 
+use App\Support\Extensions\Extensions;
 use Illuminate\Contracts\Container\Container;
 use LogicException;
 
@@ -42,10 +43,15 @@ final class ToolRegistry
     /** @return array<string, Tool> */
     public function for(McpContext $context): array
     {
-        return array_filter($this->all(), fn (Tool $tool) => $this->denial($tool, $context) === null);
+        return array_filter($this->all(), fn (Tool $tool) => $this->access($tool, $context) === null);
     }
 
     public function denial(Tool $tool, McpContext $context): ?string
+    {
+        return $this->access($tool, $context) ?? $this->container->make(Extensions::class)->toolRefusal($tool, $context);
+    }
+
+    private function access(Tool $tool, McpContext $context): ?string
     {
         if (! $context->allows($tool->scope())) {
             return match ($tool->scope()) {

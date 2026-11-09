@@ -40,6 +40,9 @@ class DaemonJob extends Model
 
     protected $keyType = 'string';
 
+    // Jobs are ordered by when they were made, and two can be made in the same second.
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     protected $guarded = [];
 
     // Holds deploy secrets: never send it to the browser.

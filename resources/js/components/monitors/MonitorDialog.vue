@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useSelfHosted } from '@/composables/useSelfHosted';
 import { useForm } from '@inertiajs/vue3';
 import { ChevronRight } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
@@ -16,6 +17,7 @@ import AppButton from '@/components/workspace/AppButton.vue';
 import SubmitButton from '@/components/workspace/SubmitButton.vue';
 import ToggleSwitch from '@/components/workspace/ToggleSwitch.vue';
 
+const selfHosted = useSelfHosted();
 const props = defineProps<{
     monitor?: Monitor | null;
     machines: MachineOption[];
@@ -252,7 +254,9 @@ const focusRing =
                                     :disabled="seconds < minInterval"
                                     :title="
                                         seconds < minInterval
-                                            ? $t('Not on your plan')
+                                            ? selfHosted
+                                                ? $t('Not on this install')
+                                                : $t('Not on your plan')
                                             : undefined
                                     "
                                     @click="form.interval = seconds"

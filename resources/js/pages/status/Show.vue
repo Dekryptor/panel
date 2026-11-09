@@ -17,7 +17,7 @@ import type {
 
 const props = defineProps<{
     status: StatusReport;
-    brand: { name: string; logoUrl: string | null };
+    statusBrand: { name: string; logoUrl: string | null };
     pageTitle: string | null;
     private: boolean;
     jsonUrl: string;
@@ -287,8 +287,8 @@ const updated = computed(() => {
             <header class="flex items-center justify-between gap-4">
                 <div class="flex min-w-0 items-center gap-3">
                     <img
-                        v-if="brand.logoUrl"
-                        :src="brand.logoUrl"
+                        v-if="statusBrand.logoUrl"
+                        :src="statusBrand.logoUrl"
                         alt=""
                         class="size-8 shrink-0 rounded-md object-cover"
                     />
@@ -390,7 +390,7 @@ const updated = computed(() => {
             <p v-if="private" class="mt-2 text-[13px]/5 text-(--sp-muted)">
                 {{
                     $t('Only members of :name can see this page.', {
-                        name: brand.name,
+                        name: statusBrand.name,
                     })
                 }}
             </p>

@@ -7,6 +7,7 @@ use App\Mcp\Present;
 use App\Mcp\Schema;
 use App\Mcp\Tool;
 use App\Models\Machine;
+use App\Support\Edition;
 use App\Support\StatusPages\StatusReport;
 
 final class ListStatusPages extends Tool
@@ -98,7 +99,7 @@ final class ListStatusPages extends Tool
                     'available' => $workspace->hasFleetStatusPage(),
                     'note' => $workspace->hasFleetStatusPage()
                         ? 'No fleet page yet: update_fleet_status_page makes one.'
-                        : 'One status page for every machine comes with Business.',
+                        : (Edition::selfHosted() ? 'One status page for every machine needs a ServerOS license (Settings › License).' : 'One status page for every machine comes with Business.'),
                     'settingsUrl' => $context->url('/settings/status-page'),
                 ]
                 : [

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { trans } from 'laravel-vue-i18n';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Check, ExternalLink } from '@lucide/vue';
 import {
     SolarGlobe as Globe,
@@ -9,6 +9,10 @@ import {
 } from '@/lib/solarIcons';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { toast } from '@/lib/toast';
+import {
+    LICENSE_SETTINGS_PATH,
+    useSelfHosted,
+} from '@/composables/useSelfHosted';
 import InputError from '@/components/InputError.vue';
 import {
     Dialog,
@@ -57,7 +61,10 @@ const props = defineProps<{
     goUrl: string;
     docsUrl: string;
     billingUrl: string | null;
+    direct?: boolean;
 }>();
+
+const selfHosted = useSelfHosted();
 
 const usable = computed(() => props.allowed && props.ready && props.canChange);
 
@@ -205,7 +212,15 @@ const th = 'px-3 py-2.5 text-left text-[12px]/4 font-medium';
             v-if="!allowed || !ready"
             class="border-b border-(--ds-divider) px-5 py-3 text-[13px]/5 text-(--ds-text-muted)"
         >
-            <template v-if="!allowed">
+            <template v-if="!allowed && selfHosted">
+                {{ $t('Your own domains need a ServerOS license.') + ' ' }}
+                <Link
+                    :href="LICENSE_SETTINGS_PATH"
+                    class="text-(--ds-text) underline underline-offset-2"
+                    >{{ $t('Add one in Settings › License') }}</Link
+                >
+            </template>
+            <template v-else-if="!allowed">
                 {{ $t('Your own domains come with Business.') + ' ' }}
                 <a
                     v-if="billingUrl"
@@ -340,9 +355,13 @@ const th = 'px-3 py-2.5 text-left text-[12px]/4 font-medium';
                                             ) + ' '
                                         }}
                                         <span class="text-(--ds-text)">{{
-                                            $t(
-                                                'On Cloudflare, the CNAME can be proxied (orange cloud) or DNS only: both work.',
-                                            )
+                                            direct
+                                                ? $t(
+                                                      'On Cloudflare, keep the record DNS only (grey cloud), so this panel can get its certificate.',
+                                                  )
+                                                : $t(
+                                                      'On Cloudflare, the CNAME can be proxied (orange cloud) or DNS only: both work.',
+                                                  )
                                         }}</span>
                                     </p>
                                     <table class="w-full text-[12px]/5">
@@ -392,9 +411,15 @@ const th = 'px-3 py-2.5 text-left text-[12px]/4 font-medium';
                                         class="border-t border-(--ds-divider) px-3.5 py-2 text-[12px]/5 text-(--ds-amber)"
                                     >
                                         {{
-                                            $t('Cloudflare says: :error', {
-                                                error: row.domain.error,
-                                            })
+                                            direct
+                                                ? row.domain.error
+                                                : $t(
+                                                      'Cloudflare says: :error',
+                                                      {
+                                                          error: row.domain
+                                                              .error,
+                                                      },
+                                                  )
                                         }}
                                     </p>
                                 </div>
@@ -435,10 +460,15 @@ const th = 'px-3 py-2.5 text-left text-[12px]/4 font-medium';
             class="border-t border-(--ds-divider) px-5 py-3 text-[12.5px]/5 text-(--ds-text-muted)"
         >
             {{
-                $t(
-                    'Use a subdomain you own, pointed at :target with a CNAME record. Root domains like example.com can’t be used.',
-                    { target: cnameTarget },
-                ) + ' '
+                (direct
+                    ? $t(
+                          'Use a subdomain you own, pointed at :target with a CNAME record, or an A record to the same address. This panel gets its certificate the first time someone visits. Root domains like example.com can’t be used.',
+                          { target: cnameTarget },
+                      )
+                    : $t(
+                          'Use a subdomain you own, pointed at :target with a CNAME record. Root domains like example.com can’t be used.',
+                          { target: cnameTarget },
+                      )) + ' '
             }}
             <a
                 :href="docsUrl"

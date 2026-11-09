@@ -1,11 +1,13 @@
 <?php
 
 use App\Enums\Plan;
+use App\Models\Activity;
 use App\Models\DaemonJob;
 use App\Models\Machine;
 use App\Models\Workflow;
 use App\Models\WorkflowRun;
 use App\Models\Workspace;
+use App\Support\Activity\ActivityLine;
 use App\Support\Workflows\ReleaseSpec;
 use App\Support\Workflows\WorkflowEngine;
 use App\Support\Workflows\WorkflowSteps;
@@ -124,6 +126,58 @@ test('pushes need a good signature and only start workflows on that repository a
     push(['deleted' => true, 'after' => str_repeat('0', 40)])->assertJson(['ignored' => true]);
 
     expect(DaemonJob::query()->count())->toBe(0);
+});
+
+test('a push that arrives after a newer one is skipped, and the owner can see why', function () {
+    [$workspace] = releaseFlow();
+
+    push(['after' => str_repeat('b', 40), 'repository' => ['pushed_at' => 1_700_000_100]])->assertJson(['started' => 1]);
+    push(['after' => str_repeat('a', 40), 'repository' => ['pushed_at' => 1_700_000_000]])->assertJson(['started' => 0, 'skipped' => 1]);
+
+    $run = WorkflowRun::query()->sole();
+    $skipped = Activity::query()->where('action', 'workflow.skipped')->sole();
+    $line = ActivityLine::describe($skipped, false);
+
+    expect($run->trigger['data']['commit'])->toBe(str_repeat('b', 40))
+        ->and($run->trigger['data']['pushed_at'])->toBe(1_700_000_100)
+        ->and($skipped->workspace_id)->toBe($workspace->id)
+        ->and($skipped->subject)->toBe('Ship shop')
+        ->and($skipped->meta)->toMatchArray(['reason' => 'late', 'commit' => 'aaaaaaa', 'branch' => 'main'])
+        ->and($line['verb'])->toBe('skipped a late push')
+        ->and($line['after'])->toBe('aaaaaaa to main, a newer push already ran');
+});
+
+test('the same push delivered twice releases once', function () {
+    releaseFlow();
+
+    push(['repository' => ['pushed_at' => '2026-11-09T10:00:00Z']])->assertJson(['started' => 1]);
+    push(['repository' => ['pushed_at' => '2026-11-09T10:00:00Z']])->assertJson(['started' => 0, 'skipped' => 1]);
+    push()->assertJson(['started' => 0, 'skipped' => 1]);
+
+    expect(WorkflowRun::query()->sole()->trigger['data']['pushed_at'])->toBe(1_794_218_400)
+        ->and(Activity::query()->where('action', 'workflow.skipped')->pluck('meta')->pluck('reason')->all())->toBe(['repeat', 'repeat']);
+});
+
+test('pushes that arrive in order all release, even back to an earlier commit', function () {
+    releaseFlow();
+
+    push(['after' => str_repeat('a', 40), 'repository' => ['pushed_at' => 1_700_000_000]])->assertJson(['started' => 1]);
+    push(['after' => str_repeat('b', 40), 'repository' => ['pushed_at' => 1_700_000_100]])->assertJson(['started' => 1]);
+    push(['after' => str_repeat('a', 40), 'repository' => ['pushed_at' => 1_700_000_200]])->assertJson(['started' => 1]);
+
+    expect(WorkflowRun::query()->orderBy('id')->get()->map(fn (WorkflowRun $run) => $run->trigger['data']['commit'])->all())
+        ->toBe([str_repeat('a', 40), str_repeat('b', 40), str_repeat('a', 40)])
+        ->and(Activity::query()->where('action', 'workflow.skipped')->exists())->toBeFalse();
+});
+
+test('a newer push to another branch does not hold back this one', function () {
+    [, , $workflow] = releaseFlow();
+    $workflow->runs()->create([
+        'state' => 'succeeded', 'graph' => $workflow->graph, 'steps' => [], 'frontier' => [], 'logs' => [], 'started_at' => now(),
+        'trigger' => ['kind' => 'git.push', 'summary' => '', 'data' => ['repo' => 'acme/shop', 'branch' => 'staging', 'commit' => str_repeat('a', 40), 'pushed_at' => 1_700_000_900]],
+    ]);
+
+    push(['repository' => ['pushed_at' => 1_700_000_000]])->assertJson(['started' => 1, 'skipped' => 0]);
 });
 
 test('run by hand, a release takes the branch’s latest commit', function () {

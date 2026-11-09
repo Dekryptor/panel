@@ -8,6 +8,7 @@ use App\Mcp\Tool;
 use App\Mcp\ToolError;
 use App\Models\StatusPage;
 use App\Models\WorkspaceStatusPage;
+use App\Support\Edition;
 use App\Support\StatusPages\FleetStatusReport;
 use App\Support\StatusPages\StatusReport;
 
@@ -87,7 +88,7 @@ final class PreviewStatusPage extends Tool
         return match (true) {
             ! $page->exists => 'Nobody: there’s no page yet (this is what one would show, from the default settings).',
             ! $page->enabled => 'Nobody: the page is switched off, so its address answers “not found”.',
-            ! $page->live() => 'Nobody: '.($fleet ? 'the fleet page needs Business' : 'status pages need Pro or Business').', so its address answers “not found”.',
+            ! $page->live() => 'Nobody: '.($fleet ? (Edition::selfHosted() ? 'the fleet page needs a ServerOS license' : 'the fleet page needs Business') : 'status pages need Pro or Business').', so its address answers “not found”.',
             $page->public => 'Anyone with the link.',
             default => "Only members of {$context->workspace->name}, signed in; anyone else gets “not found” (or the sign-in page).",
         };

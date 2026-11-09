@@ -2,6 +2,8 @@
 
 namespace App\Support\Extensions;
 
+use App\Mcp\McpContext;
+use App\Mcp\Tool;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\InstallPing;
@@ -10,6 +12,7 @@ use App\Support\Mcp\WorkspaceAudience;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\HtmlString;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -98,6 +101,12 @@ final class Extensions
 
     /** @var array<class-string<Model>, array<string, string>> */
     private array $modelCasts = [];
+
+    /** @var list<Closure(Tool, McpContext): (string|null)> */
+    private array $toolGuards = [];
+
+    /** @var list<Closure(array<string, mixed>): (string|null)> */
+    private array $headTags = [];
 
     /** @param  'pages'|'marketing/pages'  $folder */
     public static function pageEntry(string $component, string $folder, string $extension): string
@@ -491,5 +500,44 @@ final class Extensions
     public function modelCasts(string $model): array
     {
         return $this->modelCasts[$model] ?? [];
+    }
+
+    /** @param  Closure(Tool, McpContext): (string|null)  $guard */
+    public function addToolGuard(Closure $guard): void
+    {
+        $this->toolGuards[] = $guard;
+    }
+
+    public function toolRefusal(Tool $tool, McpContext $context): ?string
+    {
+        foreach ($this->toolGuards as $guard) {
+            if (($refusal = $guard($tool, $context)) !== null) {
+                return $refusal;
+            }
+        }
+
+        return null;
+    }
+
+    /** @param  Closure(array<string, mixed>): (string|null)  $tag */
+    public function addHeadTag(Closure $tag): void
+    {
+        $this->headTags[] = $tag;
+    }
+
+    /**
+     * @param  array<string, mixed>  $page
+     * @return list<HtmlString>
+     */
+    public function headTags(array $page): array
+    {
+        $tags = [];
+        foreach ($this->headTags as $tag) {
+            if (($html = $tag($page)) !== null && $html !== '') {
+                $tags[] = new HtmlString($html);
+            }
+        }
+
+        return $tags;
     }
 }

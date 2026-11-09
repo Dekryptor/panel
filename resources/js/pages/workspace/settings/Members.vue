@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { trans } from 'laravel-vue-i18n';
-import { Form, Head, router, useForm } from '@inertiajs/vue3';
+import { Form, Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     SolarMail as Mail,
     SolarShieldCheck as ShieldCheck,
@@ -15,6 +15,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getInitials } from '@/composables/useInitials';
+import {
+    LICENSE_SETTINGS_PATH,
+    useSelfHosted,
+} from '@/composables/useSelfHosted';
 import { onWorkspace } from '@/lib/workspaceRoute';
 import invitationRoutes from '@/routes/workspace/invitations';
 import memberRoutes from '@/routes/workspace/members';
@@ -76,6 +80,7 @@ type JoinRequest = {
 defineOptions({ inheritAttrs: false });
 
 const props = defineProps<Props>();
+const selfHosted = useSelfHosted();
 
 const slug = computed(() => props.workspace.slug);
 
@@ -661,12 +666,41 @@ const selectClass =
                         >
                             {{ ' ' + $t('Your roles') }}
                             <span
-                                v-if="!hasCustomRoles"
+                                v-if="!hasCustomRoles && !selfHosted"
                                 class="rounded-[4px] border border-(--ds-blue-border) bg-(--ds-blue-bg)/70 px-1.5 py-0.5 font-body text-[10px]/3 font-medium tracking-[0.08em] text-(--ds-blue-strong) uppercase"
                                 >{{ $t('Business') }}</span
                             >
                         </span>
-                        <span class="text-[13px]/5 text-(--ds-text-muted)">
+                        <span
+                            v-if="selfHosted"
+                            class="text-[13px]/5 text-(--ds-text-muted)"
+                        >
+                            {{
+                                $t(
+                                    'Pick exactly what a role can do. If the workspace’s license is removed, people with these roles become Viewers.',
+                                )
+                            }}
+                            <template v-if="!hasCustomRoles">
+                                {{
+                                    ' ' +
+                                    $t(
+                                        'Custom roles need a ServerOS license.',
+                                    ) +
+                                    ' '
+                                }}
+                                <Link
+                                    :href="LICENSE_SETTINGS_PATH"
+                                    class="underline underline-offset-2"
+                                    >{{
+                                        $t('Add one in Settings › License')
+                                    }}</Link
+                                >
+                            </template>
+                        </span>
+                        <span
+                            v-else
+                            class="text-[13px]/5 text-(--ds-text-muted)"
+                        >
                             {{
                                 ' ' +
                                 $t(

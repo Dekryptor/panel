@@ -5,6 +5,7 @@ namespace App\Support\Domains;
 use App\Models\Activity;
 use App\Models\Workspace;
 use App\Models\WorkspaceDomain;
+use App\Support\Edition;
 use App\Support\Extensions\Extensions;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Cache;
@@ -48,6 +49,16 @@ final class CustomDomains
 
             return ['slugs' => $slugs, 'hosts' => $hosts];
         });
+    }
+
+    public static function direct(): bool
+    {
+        return Edition::selfHosted() && ! Cloudflare::enabled();
+    }
+
+    public static function target(): string
+    {
+        return self::direct() ? strtolower((string) config('app.domain')) : Cloudflare::cnameTarget();
     }
 
     public static function forget(): void
@@ -118,7 +129,7 @@ final class CustomDomains
         $existing = $workspace->domains()->where('purpose', $purpose)->first();
 
         $cloudflare = null;
-        if ($hostname !== null) {
+        if ($hostname !== null && ! self::direct()) {
             $cloudflare = app(Cloudflare::class)->create($hostname);
         }
         if ($existing !== null) {
@@ -136,6 +147,8 @@ final class CustomDomains
         ]);
         if ($cloudflare !== null) {
             $this->apply($domain, $cloudflare);
+        } elseif ($hostname !== null) {
+            $this->checkDns($domain);
         }
         self::forget();
         Activity::record($workspace, 'domain.add', $hostname ?? "/{$path}", meta: ['purpose' => $purpose]);
@@ -145,21 +158,24 @@ final class CustomDomains
 
     public function refresh(WorkspaceDomain $domain, bool $nudge = false): bool
     {
-        if ($domain->cloudflare_id === null) {
-            return false;
-        }
-
-        try {
-            $cloudflare = app(Cloudflare::class);
-            $result = $nudge && $domain->ssl_state !== 'active' ? $cloudflare->recheck($domain->cloudflare_id) : $cloudflare->get($domain->cloudflare_id);
-        } catch (RuntimeException $e) {
-            $domain->forceFill(['checked_at' => now(), 'error' => $e->getMessage()])->save();
-
-            return false;
-        }
-
         $was = $domain->state;
-        $this->apply($domain, $result);
+        if ($domain->cloudflare_id === null) {
+            if ($domain->hostname === null || ! self::direct()) {
+                return false;
+            }
+            $this->checkDns($domain);
+        } else {
+            try {
+                $cloudflare = app(Cloudflare::class);
+                $result = $nudge && $domain->ssl_state !== 'active' ? $cloudflare->recheck($domain->cloudflare_id) : $cloudflare->get($domain->cloudflare_id);
+            } catch (RuntimeException $e) {
+                $domain->forceFill(['checked_at' => now(), 'error' => $e->getMessage()])->save();
+
+                return false;
+            }
+            $this->apply($domain, $result);
+        }
+
         $became = $was !== 'active' && $domain->active();
         if ($became || $was !== $domain->state) {
             self::forget();
@@ -185,6 +201,30 @@ final class CustomDomains
         if ($record) {
             Activity::record($domain->workspace_id, 'domain.remove', $domain->hostname ?? "/{$domain->path}", meta: ['purpose' => $domain->purpose]);
         }
+    }
+
+    private function checkDns(WorkspaceDomain $domain): void
+    {
+        $resolver = app(DomainResolver::class);
+        $hostname = (string) $domain->hostname;
+        $target = self::target();
+        $ours = $target === '' ? [] : $resolver->addresses($target);
+        $found = $resolver->addresses($hostname);
+        $active = $resolver->cname($hostname) === $target
+            || ($ours !== [] && array_intersect($found, $ours) !== []);
+
+        $domain->forceFill([
+            'state' => $active ? 'active' : 'pending',
+            'ssl_state' => null,
+            'verification' => $active ? null : ['records' => [['type' => 'CNAME', 'name' => $hostname, 'value' => $target]]],
+            'error' => match (true) {
+                $active => null,
+                $found === [] => 'It doesn’t point anywhere yet.',
+                default => 'It points at '.implode(', ', $found).', not at this panel'.($ours === [] ? '' : ' ('.implode(', ', $ours).')').'.',
+            },
+            'verified_at' => $active ? ($domain->verified_at ?? now()) : null,
+            'checked_at' => now(),
+        ])->save();
     }
 
     /** @param  array<string, mixed>  $result */

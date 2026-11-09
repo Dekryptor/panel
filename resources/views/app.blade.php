@@ -75,10 +75,10 @@
 
         @fonts(['instrument-sans', 'mona-sans', 'geist-mono', 'cabin', 'inter', 'schibsted-grotesk'])
 
-        @if (app()->isProduction() && filled(config('services.seline.token')))
-            @unless ($page['component'] === 'status/Embed')
-                <script async src="/vendor/seline.js" data-token="{{ config('services.seline.token') }}"></script>
-            @endunless
+        @if (($headTags = app(\App\Support\Extensions\Extensions::class)->headTags($page)) !== [])
+            @foreach ($headTags as $headTag)
+                {{ $headTag }}
+            @endforeach
         @endif
 
         @vite(['resources/css/app.css', 'resources/js/app.ts', \App\Support\Extensions\Extensions::pageEntry($page['component'], 'pages', 'vue')])

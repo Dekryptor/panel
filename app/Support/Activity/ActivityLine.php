@@ -323,6 +323,9 @@ final class ActivityLine
                 })
                 : $set('ran the workflow'),
             'workflow.failed' => $set('failed', null, 'bad'),
+            'workflow.skipped' => ($meta['reason'] ?? null) === 'late'
+                ? $set('skipped a late push', $t(':commit to :branch, a newer push already ran', ['commit' => (string) ($meta['commit'] ?? ''), 'branch' => (string) ($meta['branch'] ?? '')]), 'warn')
+                : $set('skipped a repeat push', $t(':commit to :branch already ran', ['commit' => (string) ($meta['commit'] ?? ''), 'branch' => (string) ($meta['branch'] ?? '')]), 'warn'),
             'ai.connect' => $set('connected their own AI key:', null, 'warn'),
             'ai.update' => $set('changed their AI key for'),
             'ai.disconnect' => $set('disconnected their AI key for', null, 'warn'),
@@ -343,7 +346,7 @@ final class ActivityLine
             $out['detail'] = $meta['cause'] ?? null;
         }
 
-        if (! $a->byPerson() && in_array($a->action, ['machine.offline', 'machine.online', 'machine.disk_full', 'monitor.down', 'monitor.up', 'backup.failed', 'backup.restore_failed', 'machine.connect', 'service.down', 'service.up', 'service.crash_loop', 'workflow.run', 'workflow.failed', 'fix.done', 'fix.failed', 'mcp.revoke', 'domain.active', 'machine.daemon_updated', 'daemon.update_waiting', 'email_domain.unverified', 'cloud.suspend', 'cloud.resume', 'cloud.end', 'cloud.throttle'], true)) {
+        if (! $a->byPerson() && in_array($a->action, ['machine.offline', 'machine.online', 'machine.disk_full', 'monitor.down', 'monitor.up', 'backup.failed', 'backup.restore_failed', 'machine.connect', 'service.down', 'service.up', 'service.crash_loop', 'workflow.run', 'workflow.failed', 'workflow.skipped', 'fix.done', 'fix.failed', 'mcp.revoke', 'domain.active', 'machine.daemon_updated', 'daemon.update_waiting', 'email_domain.unverified', 'cloud.suspend', 'cloud.resume', 'cloud.end', 'cloud.throttle'], true)) {
             $out['leads'] = true;
         }
 

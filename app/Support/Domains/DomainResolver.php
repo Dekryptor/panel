@@ -16,4 +16,12 @@ class DomainResolver
             $records,
         ))));
     }
+
+    public function cname(string $domain): ?string
+    {
+        $records = @dns_get_record($domain, DNS_CNAME) ?: [];
+        $target = $records[0]['target'] ?? null;
+
+        return is_string($target) && $target !== '' ? strtolower(rtrim($target, '.')) : null;
+    }
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useSelfHosted } from '@/composables/useSelfHosted';
 import { trans } from 'laravel-vue-i18n';
 import { Head, router } from '@inertiajs/vue3';
 import { ArrowDown, ArrowLeft, Check, ChevronDown, Search } from '@lucide/vue';
@@ -59,6 +60,7 @@ type Filters = {
     range: string | null;
 };
 
+const selfHosted = useSelfHosted();
 const props = defineProps<{
     workspace: Workspace;
     machines: { id: number; name: string }[];
@@ -83,6 +85,21 @@ const props = defineProps<{
         error: string | null;
     };
 }>();
+
+const quotaParams = computed(() => {
+    const time = (iso: string) =>
+        new Date(iso).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+
+    return {
+        limit: props.quota.limit.toLocaleString(),
+        dropped: props.quota.dropped.toLocaleString(),
+        time: props.quota.fullAt ? time(props.quota.fullAt) : '',
+        reset: time(props.quota.resetsAt),
+    };
+});
 
 const KEEP = 2000;
 const FOLLOW_EVERY = 2000;
@@ -965,23 +982,15 @@ watch(live, (on) => {
             <p class="mt-0.5 text-pretty text-(--ds-text-muted)">
                 {{
                     ' ' +
-                    $t(
-                        'Your plan keeps :limit lines a day. :dropped more came in since :time and were left out. It starts again at :reset. To make room, stop keeping logs from a chatty service on its page.',
-                        {
-                            limit: quota.limit.toLocaleString(),
-                            dropped: quota.dropped.toLocaleString(),
-                            time: quota.fullAt
-                                ? new Date(quota.fullAt).toLocaleTimeString(
-                                      [],
-                                      { hour: '2-digit', minute: '2-digit' },
-                                  )
-                                : '',
-                            reset: new Date(quota.resetsAt).toLocaleTimeString(
-                                [],
-                                { hour: '2-digit', minute: '2-digit' },
-                            ),
-                        },
-                    ) +
+                    (selfHosted
+                        ? $t(
+                              'This install keeps :limit lines a day. :dropped more came in since :time and were left out. It starts again at :reset. To make room, stop keeping logs from a chatty service on its page.',
+                              quotaParams,
+                          )
+                        : $t(
+                              'Your plan keeps :limit lines a day. :dropped more came in since :time and were left out. It starts again at :reset. To make room, stop keeping logs from a chatty service on its page.',
+                              quotaParams,
+                          )) +
                     ' '
                 }}
             </p>

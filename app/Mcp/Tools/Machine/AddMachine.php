@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools\Machine;
 
 use App\Actions\Machines\CreateJoinCommand;
+use App\Exceptions\MachineLimitReached;
 use App\Mcp\McpContext;
 use App\Mcp\Schema;
 use App\Mcp\Scopes;
@@ -89,7 +90,7 @@ final class AddMachine extends Tool
         }
 
         if ($created === null) {
-            throw new ToolError('This workspace has reached its machine limit.'.($workspace->machineLimit() === 0 ? ' It has no plan: choose one in Billing to connect machines.' : ' Remove a machine, or move to a bigger plan in Billing.'));
+            throw new ToolError(MachineLimitReached::selfHostedMessage($workspace) ?? 'This workspace has reached its machine limit.'.($workspace->machineLimit() === 0 ? ' It has no plan: choose one in Billing to connect machines.' : ' Remove a machine, or move to a bigger plan in Billing.'));
         }
 
         $follows = $policy ?? $group->policy ?? MachinePolicies::defaultFor($workspace);

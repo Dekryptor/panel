@@ -7,6 +7,7 @@ use App\Models\Activity;
 use App\Models\Workspace;
 use App\Models\WorkspaceCustomRole;
 use App\Support\Audit\Audited;
+use App\Support\Edition;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -59,7 +60,7 @@ class WorkspaceCustomRoleController extends Controller
     private function validated(Request $request, Workspace $workspace, ?WorkspaceCustomRole $role = null): array
     {
         Gate::authorize('manageMembers', $workspace);
-        abort_unless($workspace->hasCustomRoles(), 403, 'Custom roles are on Business.');
+        abort_unless($workspace->hasCustomRoles(), 403, Edition::selfHosted() ? 'Custom roles need a ServerOS license.' : 'Custom roles are on Business.');
 
         $data = $request->validate([
             'name' => [

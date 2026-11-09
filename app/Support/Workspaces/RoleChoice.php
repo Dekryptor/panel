@@ -5,6 +5,7 @@ namespace App\Support\Workspaces;
 use App\Enums\WorkspaceRole;
 use App\Models\Workspace;
 use App\Models\WorkspaceCustomRole;
+use App\Support\Edition;
 
 final class RoleChoice
 {
@@ -19,7 +20,7 @@ final class RoleChoice
 
         if (preg_match('/^custom:(\d+)$/', $value, $m) === 1) {
             if (! $workspace->hasCustomRoles()) {
-                return 'Custom roles are on Business.';
+                return Edition::selfHosted() ? 'Custom roles need a ServerOS license.' : 'Custom roles are on Business.';
             }
             $custom = $workspace->customRoles()->find((int) $m[1]);
 

@@ -94,7 +94,7 @@ class WorkspaceMemberController extends Controller
             'hasStaffRoles' => $workspace->hasStaffRoles(),
             'hasCustomRoles' => $customRoles,
             'customRoles' => $workspace->customRoles->map->toPageProps(),
-            'permissions' => array_map(fn (WorkspacePermission $p) => ['value' => $p->value, 'label' => $p->label()], WorkspacePermission::cases()),
+            'permissions' => array_map(fn (WorkspacePermission $p) => ['value' => $p->value, 'label' => $p->label()], WorkspacePermission::offered()),
             'requireTwoFactor' => $workspace->require_two_factor,
             ...$extensions->pagePropsFor('workspace/settings/Members', $request, $workspace),
         ]);

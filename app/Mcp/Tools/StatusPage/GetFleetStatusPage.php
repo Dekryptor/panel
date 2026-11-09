@@ -6,6 +6,7 @@ use App\Mcp\McpContext;
 use App\Mcp\Tool;
 use App\Models\Machine;
 use App\Models\Monitor;
+use App\Support\Edition;
 use App\Support\StatusPages\FleetStatusReport;
 
 final class GetFleetStatusPage extends Tool
@@ -58,7 +59,9 @@ final class GetFleetStatusPage extends Tool
             'preview' => StatusPages::preview((new FleetStatusReport($page))->toArray()),
             'settingsUrl' => $context->url('/settings/status-page'),
             'note' => match (true) {
-                ! $workspace->hasFleetStatusPage() => 'One status page for every machine comes with Business. On Pro, each machine can have its own (list_status_pages).',
+                ! $workspace->hasFleetStatusPage() => Edition::selfHosted()
+                    ? 'One status page for every machine needs a ServerOS license (Settings › License). Each machine can still have its own (list_status_pages).'
+                    : 'One status page for every machine comes with Business. On Pro, each machine can have its own (list_status_pages).',
                 ! $page->exists => 'There’s no fleet page yet: these are the settings it would start with. update_fleet_status_page creates it.',
                 ! $page->enabled => 'The fleet page is switched off: visitors get “not found”.',
                 default => null,

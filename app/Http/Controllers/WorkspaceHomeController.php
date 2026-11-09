@@ -50,6 +50,7 @@ class WorkspaceHomeController extends Controller
             'memberCount' => $workspace->members()->count(),
             'lastBackup' => $machines->max('last_backup_at')?->diffForHumans(),
             'machines' => MachineResource::collection($machines->take(6))->resolve(),
+            ...app(Extensions::class)->pagePropsFor('workspace/Home', $request, $workspace),
         ]);
     }
 

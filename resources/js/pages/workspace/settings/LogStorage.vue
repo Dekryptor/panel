@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import {
+    LICENSE_SETTINGS_PATH,
+    useSelfHosted,
+} from '@/composables/useSelfHosted';
 import { useUpgradeLink } from '@/composables/useUpgradeLink';
 import { trans } from 'laravel-vue-i18n';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
@@ -24,6 +28,7 @@ import { timeAgo } from '@/lib/timeAgo';
 import type { Workspace } from '@/types';
 
 const upgrade = useUpgradeLink();
+const selfHosted = useSelfHosted();
 
 const props = defineProps<{
     workspace: Workspace;
@@ -145,15 +150,23 @@ const status = computed(() => {
 
 const statusHint = computed(() => {
     if (!props.store) {
-        return trans('Not set up. Logs are kept by ServerOS.');
+        return selfHosted.value
+            ? trans('Not set up. Logs are kept in this panel’s database.')
+            : trans('Not set up. Logs are kept by ServerOS.');
     }
     if (!props.store.enabled) {
-        return trans('Off. New lines go to ServerOS’s storage.');
+        return selfHosted.value
+            ? trans('Off. New lines go to this panel’s database.')
+            : trans('Off. New lines go to ServerOS’s storage.');
     }
     if (paused.value) {
-        return trans(
-            'Paused while the workspace isn’t on Business. New lines go to ServerOS’s storage.',
-        );
+        return selfHosted.value
+            ? trans(
+                  'Paused while the workspace has no license for it. New lines go to this panel’s database.',
+              )
+            : trans(
+                  'Paused while the workspace isn’t on Business. New lines go to ServerOS’s storage.',
+              );
     }
     if (props.store.status === 'unreachable') {
         return trans('ServerOS can’t reach it right now.');
@@ -184,7 +197,16 @@ async function copyIp(): Promise<void> {
             class="ds-tile flex flex-wrap items-center justify-between gap-3 px-5 py-4"
         >
             <p class="max-w-xl text-[13px]/5 text-(--ds-text-secondary)">
-                {{
+                <template v-if="selfHosted">{{
+                    paused
+                        ? $t(
+                              'This workspace’s license doesn’t include your own log storage any more, so new lines go to this panel’s database. Lines already in your database stay there. Add a license that includes it and new lines go to your database again.',
+                          )
+                        : $t(
+                              'Keeping logs in a Postgres database you own needs a ServerOS license.',
+                          )
+                }}</template>
+                <template v-else>{{
                     paused
                         ? $t(
                               'Your plan doesn’t include your own log storage any more, so new lines go to ServerOS’s storage, with its daily limit. Lines already in your database stay there. Move to Business and new lines go to your database again.',
@@ -192,10 +214,17 @@ async function copyIp(): Promise<void> {
                         : $t(
                               'Keeping logs in a Postgres database you own comes with Business.',
                           )
-                }}
+                }}</template>
             </p>
             <Link
-                v-if="upgrade"
+                v-if="selfHosted"
+                :href="LICENSE_SETTINGS_PATH"
+                :class="appButtonClasses('primary', 'sm')"
+            >
+                {{ $t('Add a license') }}
+            </Link>
+            <Link
+                v-else-if="upgrade"
                 :href="upgrade.href"
                 :class="appButtonClasses('primary', 'sm')"
             >
@@ -206,9 +235,13 @@ async function copyIp(): Promise<void> {
         <Tile
             :title="$t('Log storage')"
             :description="
-                $t(
-                    'Keep your logs in a Postgres database you own, instead of ours.',
-                )
+                selfHosted
+                    ? $t(
+                          'Keep your logs in a Postgres database you own, instead of this panel’s.',
+                      )
+                    : $t(
+                          'Keep your logs in a Postgres database you own, instead of ours.',
+                      )
             "
             :icon="Database"
             :padded="false"
@@ -353,12 +386,17 @@ async function copyIp(): Promise<void> {
                         :label="$t('Old lines')"
                         :hint="
                             form.prune
-                                ? $t(
-                                      'Delete lines after :days days, like the plan.',
-                                      {
-                                          days: String(retentionDays),
-                                      },
-                                  )
+                                ? selfHosted
+                                    ? $t(
+                                          'Delete lines after :days days, like this panel does.',
+                                          { days: String(retentionDays) },
+                                      )
+                                    : $t(
+                                          'Delete lines after :days days, like the plan.',
+                                          {
+                                              days: String(retentionDays),
+                                          },
+                                      )
                                 : $t(
                                       'Keep them. Deleting old lines is up to you.',
                                   )
@@ -405,9 +443,14 @@ async function copyIp(): Promise<void> {
             >
                 <p>
                     {{
-                        $t(
-                            'Once it’s on, new lines are written to your database and never to ours. Lines you already have stay with us until the plan’s retention removes them. The daily line allowance doesn’t apply.',
-                        )
+                        selfHosted
+                            ? $t(
+                                  'Once it’s on, new lines are written to your database and never to this panel’s. Lines you already have stay in the panel until they’re :days days old. The daily line allowance doesn’t apply.',
+                                  { days: String(retentionDays) },
+                              )
+                            : $t(
+                                  'Once it’s on, new lines are written to your database and never to ours. Lines you already have stay with us until the plan’s retention removes them. The daily line allowance doesn’t apply.',
+                              )
                     }}
                 </p>
                 <p>
@@ -477,9 +520,13 @@ async function copyIp(): Promise<void> {
                             ? $t(
                                   'ServerOS forgets how to reach it. Lines already in that database stay there.',
                               )
-                            : $t(
-                                  'New lines go back to ServerOS’s storage. Lines already in your database stay there, but ServerOS can’t show them until you turn it on again.',
-                              )
+                            : selfHosted
+                              ? $t(
+                                    'New lines go back to this panel’s database. Lines already in your database stay there, but the panel can’t show them until you turn it on again.',
+                                )
+                              : $t(
+                                    'New lines go back to ServerOS’s storage. Lines already in your database stay there, but ServerOS can’t show them until you turn it on again.',
+                                )
                     }}
                 </DialogDescription>
             </div>

@@ -13,6 +13,7 @@ use App\Models\MachineGroup;
 use App\Models\StatusPage;
 use App\Models\WorkspaceStatusPage;
 use App\Support\Audit\AuditContext;
+use App\Support\Edition;
 use App\Support\StatusPages\FleetStatusReport;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -180,7 +181,7 @@ final class UpdateFleetStatusPage extends Tool
         $data = $validator->validated();
 
         if ($data['enabled'] && ! $workspace->hasFleetStatusPage()) {
-            throw new ToolError('One status page for every machine comes with Business.'.($page->enabled ? ' (This page is still switched on from before: set enabled to false to switch it off.)' : ''));
+            throw new ToolError((Edition::selfHosted() ? 'One status page for every machine needs a ServerOS license (Settings › License).' : 'One status page for every machine comes with Business.').($page->enabled ? ' (This page is still switched on from before: set enabled to false to switch it off.)' : ''));
         }
 
         $before = $this->snapshot($page);
@@ -231,7 +232,7 @@ final class UpdateFleetStatusPage extends Tool
         if (! $page->enabled) {
             $notes[] = 'The page is switched off: visitors get “not found”. Set enabled to true to publish it.';
         } elseif (! $page->live()) {
-            $notes[] = 'The page is switched on but isn’t served: the fleet page needs Business.';
+            $notes[] = Edition::selfHosted() ? 'The page is switched on but isn’t served: the fleet page needs a ServerOS license.' : 'The page is switched on but isn’t served: the fleet page needs Business.';
         }
 
         return [

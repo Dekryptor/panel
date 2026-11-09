@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Support\Edition;
+
 enum WorkspaceRole: string
 {
     case Owner = 'owner';
@@ -21,6 +23,10 @@ enum WorkspaceRole: string
 
     public function description(): string
     {
+        if (Edition::withoutBilling() && in_array($this, [self::Owner, self::Admin], true)) {
+            return $this === self::Owner ? 'Full access, including deleting the workspace.' : 'Everything except deleting the workspace.';
+        }
+
         return match ($this) {
             self::Owner => 'Full access, including billing.',
             self::Admin => 'Everything except billing.',
@@ -70,7 +76,7 @@ enum WorkspaceRole: string
             'label' => $this->label(),
             'description' => $this->description(),
             'staff' => $this->isStaffRole(),
-            'permissions' => array_map(fn (WorkspacePermission $permission) => $permission->value, $this->permissions()),
+            'permissions' => array_values(array_map(fn (WorkspacePermission $permission) => $permission->value, array_filter($this->permissions(), fn (WorkspacePermission $permission) => in_array($permission, WorkspacePermission::offered(), true)))),
         ];
     }
 }

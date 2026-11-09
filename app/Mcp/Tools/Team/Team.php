@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceCustomRole;
 use App\Models\WorkspaceInvitation;
+use App\Support\Edition;
 use Closure;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
@@ -105,7 +106,7 @@ final class Team
         $custom = null;
         if (preg_match('/^custom:(\d+)$/', $lower, $m) === 1) {
             if (! $workspace->hasCustomRoles()) {
-                throw new ToolError('Custom roles are on Business.');
+                throw new ToolError(Edition::selfHosted() ? 'Custom roles need a ServerOS license (Settings › License).' : 'Custom roles are on Business.');
             }
             $custom = $workspace->customRoles()->find((int) $m[1]);
             if ($custom === null) {
@@ -117,7 +118,7 @@ final class Team
                 throw new ToolError('Pick a role: admin, member or viewer, or one of the workspace’s own roles (list_roles shows them).');
             }
             if (! $workspace->hasCustomRoles()) {
-                throw new ToolError('Custom roles are on Business.');
+                throw new ToolError(Edition::selfHosted() ? 'Custom roles need a ServerOS license (Settings › License).' : 'Custom roles are on Business.');
             }
         }
 

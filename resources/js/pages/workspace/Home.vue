@@ -60,6 +60,11 @@ type Props = {
     machines: Machine[];
     memberCount: number;
     lastBackup: string | null;
+    licenseMachines?: {
+        allowed: number;
+        connected: number;
+        over: number;
+    } | null;
 };
 
 const props = defineProps<Props>();
@@ -127,6 +132,23 @@ const chipTones: Record<Chip['tone'], string> = {
 
 const machineAllowance = computed(() => {
     const limit = props.workspace.billing.machineLimit;
+    const license = props.licenseMachines;
+
+    if (license) {
+        return license.over > 0
+            ? trans('of :limit in your license, over by :count', {
+                  limit: String(license.allowed),
+                  count: String(license.over),
+              })
+            : trans('of :limit in your license', {
+                  limit: String(license.allowed),
+              });
+    }
+    if (props.workspace.billing.selfHosted) {
+        return limit === null
+            ? trans('no limit')
+            : trans('of :limit on this install', { limit: String(limit) });
+    }
 
     return limit === null
         ? trans('no limit on your plan')
@@ -148,6 +170,33 @@ function segments(lit: number, total: number, title: string): TileBars {
           };
 }
 
+const machineBars = computed<TileBars | undefined>(() => {
+    const machines = props.stats.machines;
+    const license = props.licenseMachines;
+    const limit = license
+        ? license.allowed
+        : props.workspace.billing.machineLimit;
+    if (limit === null || limit < 1) {
+        return undefined;
+    }
+    const title = license
+        ? trans(':count of :limit machines your license covers', {
+              count: String(machines),
+              limit: String(limit),
+          })
+        : props.workspace.billing.selfHosted
+          ? trans(':count of :limit machines this install allows', {
+                count: String(machines),
+                limit: String(limit),
+            })
+          : trans(':count of :limit machines your plan allows', {
+                count: String(machines),
+                limit: String(limit),
+            });
+
+    return segments(Math.min(machines, limit), limit, title);
+});
+
 const statTiles = computed<
     {
         label: string;
@@ -162,7 +211,6 @@ const statTiles = computed<
     }[]
 >(() => {
     const { machines, averageCpu, busy, backedUp, cpuHistory } = props.stats;
-    const limit = props.workspace.billing.machineLimit;
     const attention = props.issues.filter(
         (issue) => issue.severity !== 'notice',
     ).length;
@@ -182,17 +230,7 @@ const statTiles = computed<
                         tone: 'amber',
                     }
                   : { text: trans('Healthy'), tone: 'green' },
-            bars:
-                limit === null || limit < 1
-                    ? undefined
-                    : segments(
-                          Math.min(machines, limit),
-                          limit,
-                          trans(':count of :limit machines your plan allows', {
-                              count: String(machines),
-                              limit: String(limit),
-                          }),
-                      ),
+            bars: machineBars.value,
         },
         {
             label: trans('Average CPU'),

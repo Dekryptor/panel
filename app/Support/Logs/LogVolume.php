@@ -22,11 +22,11 @@ final class LogVolume
             ->where('log_counts.minute', '>=', $since)
             ->whereNotIn('machines.workspace_id', $own)
             ->groupBy('machines.workspace_id', 'log_counts.service')
-            ->select('machines.workspace_id', 'log_counts.service', DB::raw('sum(log_counts.n) as lines'))
+            ->select('machines.workspace_id', 'log_counts.service', DB::raw('sum(log_counts.n) as line_count'))
             ->get()
             ->groupBy('workspace_id');
 
-        $totals = $byService->map(fn ($services) => (int) $services->sum('lines'))->sortDesc()->take($limit);
+        $totals = $byService->map(fn ($services) => (int) $services->sum('line_count'))->sortDesc()->take($limit);
         $workspaces = Workspace::query()->whereIn('id', $totals->keys())->get()->keyBy('id');
 
         $rows = [];
@@ -35,7 +35,7 @@ final class LogVolume
             if ($workspace === null) {
                 continue;
             }
-            $top = $byService->get($id)->sortByDesc('lines')->first();
+            $top = $byService->get($id)->sortByDesc(fn ($service) => (int) $service->line_count)->first();
             $today = LogQuota::today($workspace);
             $rows[] = [
                 'id' => $workspace->id,
@@ -43,7 +43,7 @@ final class LogVolume
                 'plan' => $workspace->effectivePlan()?->value,
                 'lines' => $lines,
                 'top' => $top?->service,
-                'topLines' => (int) ($top->lines ?? 0),
+                'topLines' => (int) ($top->line_count ?? 0),
                 'limit' => $today['limit'],
                 'kept' => $today['kept'],
                 'dropped' => $today['dropped'],

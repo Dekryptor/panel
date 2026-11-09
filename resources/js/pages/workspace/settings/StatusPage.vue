@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import {
+    LICENSE_SETTINGS_PATH,
+    useSelfHosted,
+} from '@/composables/useSelfHosted';
 import { useUpgradeLink } from '@/composables/useUpgradeLink';
 import { trans } from 'laravel-vue-i18n';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -18,6 +22,7 @@ import { appButtonClasses } from '@/lib/appButton';
 import type { Workspace } from '@/types';
 
 const upgrade = useUpgradeLink();
+const selfHosted = useSelfHosted();
 
 const props = defineProps<{
     workspace: Workspace;
@@ -222,15 +227,26 @@ const focusRing =
         >
             <p class="text-[13px]/5 text-(--ds-text-secondary)">
                 {{
-                    ' ' +
-                    $t(
-                        'One status page for every machine comes with Business. On Pro, each machine can have its own, from its Settings.',
-                    ) +
-                    ' '
+                    selfHosted
+                        ? $t(
+                              'One status page for every machine needs a ServerOS license. Each machine can still have its own, from its Settings.',
+                          )
+                        : ' ' +
+                          $t(
+                              'One status page for every machine comes with Business. On Pro, each machine can have its own, from its Settings.',
+                          ) +
+                          ' '
                 }}
             </p>
             <Link
-                v-if="upgrade"
+                v-if="selfHosted"
+                :href="LICENSE_SETTINGS_PATH"
+                :class="appButtonClasses('primary', 'sm')"
+            >
+                {{ $t('Add a license') }}
+            </Link>
+            <Link
+                v-else-if="upgrade"
                 :href="upgrade.href"
                 :class="appButtonClasses('primary', 'sm')"
             >

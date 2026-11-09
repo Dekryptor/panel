@@ -35,7 +35,7 @@ class PublicStatusController extends Controller
         $response = Inertia::render('status/Show', [
             'status' => $report,
             'meta' => $page->public ? self::meta($page, $report) : null,
-            'brand' => ['name' => $workspace->name, 'logoUrl' => $page->iconUrl() ?? $workspace->logoUrl()],
+            'statusBrand' => ['name' => $workspace->name, 'logoUrl' => $page->iconUrl() ?? $workspace->logoUrl()],
             'pageTitle' => $page->page_title,
             'favicon' => $page->faviconUrl(),
             'private' => ! $page->public,

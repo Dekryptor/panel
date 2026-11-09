@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Activity;
 use App\Models\GitHubInstallation;
 use App\Models\Project;
 use App\Models\Workflow;
 use App\Support\GitHub\GitHubApp;
 use App\Support\Projects\Previews;
 use App\Support\Workflows\WorkflowEngine;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
@@ -43,6 +45,7 @@ class GitHubWebhookController extends Controller
             'message' => $message,
             'pusher' => (string) $request->input('pusher.name'),
             'url' => (string) $request->input('head_commit.url'),
+            'pushed_at' => self::pushedAt($request->input('repository.pushed_at')),
         ];
 
         $workspaces = GitHubInstallation::query()->where('installation_id', $installation)->pluck('workspace_id');
@@ -60,14 +63,64 @@ class GitHubWebhookController extends Controller
             });
 
         $started = 0;
+        $skipped = 0;
         foreach ($workflows as $workflow) {
+            $stale = $this->stale($workflow, $data);
+            if ($stale !== null) {
+                Activity::system($workflow->workspace, 'workflow.skipped', $workflow->name, null, [
+                    'reason' => $stale, 'repo' => $repo, 'branch' => $branch, 'commit' => substr($commit, 0, 7),
+                ]);
+                $skipped++;
+
+                continue;
+            }
             $summary = "Push to {$branch} of {$repo}: ".substr($commit, 0, 7).($message !== '' ? " {$message}" : '');
             if ($engine->start($workflow, 'git.push', $summary, $data) !== null) {
                 $started++;
             }
         }
 
-        return response()->json(['started' => $started], 202);
+        return response()->json(['started' => $started, 'skipped' => $skipped], 202);
+    }
+
+    /** @param  array{repo: string, branch: string, commit: string, pushed_at: int|null}  $push */
+    private function stale(Workflow $workflow, array $push): ?string
+    {
+        $runs = $workflow->runs()->latest('id')->limit(100)->get(['id', 'trigger']);
+        foreach ($runs as $run) {
+            $seen = $run->trigger['data'] ?? [];
+            if (($run->trigger['kind'] ?? null) !== 'git.push'
+                || strcasecmp((string) ($seen['repo'] ?? ''), $push['repo']) !== 0
+                || (string) ($seen['branch'] ?? '') !== $push['branch']) {
+                continue;
+            }
+            $seenAt = isset($seen['pushed_at']) && is_int($seen['pushed_at']) ? $seen['pushed_at'] : null;
+            if ($seenAt !== null && $push['pushed_at'] !== null && $seenAt > $push['pushed_at']) {
+                return 'late';
+            }
+            if (strcasecmp((string) ($seen['commit'] ?? ''), $push['commit']) === 0
+                && ($seenAt === null || $push['pushed_at'] === null || $seenAt >= $push['pushed_at'])) {
+                return 'repeat';
+            }
+        }
+
+        return null;
+    }
+
+    private static function pushedAt(mixed $value): ?int
+    {
+        if (is_int($value) || is_float($value) || (is_string($value) && ctype_digit($value))) {
+            return (int) $value;
+        }
+        if (is_string($value) && $value !== '') {
+            try {
+                return CarbonImmutable::parse($value)->getTimestamp();
+            } catch (Throwable) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     private function pullRequest(Request $request, Previews $previews): JsonResponse

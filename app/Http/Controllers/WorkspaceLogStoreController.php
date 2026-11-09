@@ -8,6 +8,7 @@ use App\Models\Workspace;
 use App\Models\WorkspaceLogStore;
 use App\Support\Audit\AuditContext;
 use App\Support\Audit\Audited;
+use App\Support\Edition;
 use App\Support\Logs\LogStore;
 use App\Support\Monitors\HostResolver;
 use Illuminate\Http\RedirectResponse;
@@ -193,7 +194,7 @@ class WorkspaceLogStoreController extends Controller
     {
         Gate::authorize('manageSettings', $workspace);
         if (! $workspace->hasOwnLogStorage()) {
-            throw ValidationException::withMessages(['host' => __('Logs in your own database come with Business.')]);
+            throw ValidationException::withMessages(['host' => Edition::selfHosted() ? __('Logs in your own database need a ServerOS license.') : __('Logs in your own database come with Business.')]);
         }
     }
 
