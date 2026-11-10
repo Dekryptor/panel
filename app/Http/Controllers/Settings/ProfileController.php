@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
 use App\Models\AccountEvent;
+use App\Notifications\EmailChanged;
 use App\Support\Audit\AuditContext;
 use App\Support\Audit\Audited;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -22,6 +24,7 @@ class ProfileController extends Controller
     {
         return Inertia::render('settings/Profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+            'hasPassword' => $request->user()->password_set_at !== null,
             'status' => $request->session()->get('status'),
         ]);
     }
@@ -30,7 +33,7 @@ class ProfileController extends Controller
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
         $user = $request->user();
-        $user->fill($request->validated());
+        $user->fill($request->safe()->only(['name', 'email']));
 
         if ($user->isDirty('email')) {
             $user->email_verified_at = null;
@@ -42,7 +45,11 @@ class ProfileController extends Controller
             AccountEvent::record($user, 'name.changed', ['name' => $user->name]);
         }
         if ($user->wasChanged('email')) {
-            AccountEvent::record($user, 'email.changed', ['email' => $user->email, 'from' => $user->getPrevious()['email'] ?? null]);
+            $previous = $user->getPrevious()['email'] ?? null;
+            AccountEvent::record($user, 'email.changed', ['email' => $user->email, 'from' => $previous]);
+            if (is_string($previous) && $previous !== '') {
+                rescue(fn () => Notification::route('mail', $previous)->notify(new EmailChanged($user->name, $user->email)));
+            }
         }
         if (! $user->wasChanged(['name', 'email'])) {
             AuditContext::nothingChanged();

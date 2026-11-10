@@ -126,6 +126,9 @@ class Previews
 
         $all = true;
         foreach ($environment->nodes()->where('kind', 'app')->with('machine')->get() as $app) {
+            if ($app->machine->workspace_id !== $project->workspace_id) {
+                continue;
+            }
             $last = Placement::latestDeploy($app->machine, $app->name);
             $spec = (array) ($last?->command['job'] ?? []);
             if ($last === null || self::repoOf($spec) !== $repo) {
@@ -208,8 +211,8 @@ class Previews
         }
 
         $env = array_map('strval', (array) ($spec['env'] ?? []));
-        foreach (array_keys($env) as $name) {
-            if (self::secret($name)) {
+        foreach ($env as $name => $value) {
+            if (self::secret($name) || self::secretValue($value)) {
                 unset($env[$name]);
             }
         }
@@ -223,10 +226,16 @@ class Previews
 
     public static function secret(string $name): bool
     {
-        return preg_match('/(KEY|SECRET|TOKEN|PASSWORD|PASS|PWD|CREDENTIAL|PRIVATE|DSN|AUTH|SALT|SIGNING)/i', $name) === 1;
+        return preg_match('/(KEY|SECRET|TOKEN|PASSWORD|PASS|PWD|CREDENTIAL|PRIVATE|DSN|AUTH|SALT|SIGNING|WEBHOOK)/i', $name) === 1;
     }
 
-    // DNS labels stop at 63 characters: shorten the app's part, never the pull request number.
+    public static function secretValue(string $value): bool
+    {
+        return preg_match('#[a-z][a-z0-9+.\-]*://[^/\s@]+@#i', $value) === 1
+            || preg_match('#hooks\.slack\.com/|discord(app)?\.com/api/webhooks/|-----BEGIN [A-Z ]*PRIVATE KEY#i', $value) === 1
+            || preg_match('/(?<![A-Za-z0-9])(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_\-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|(sk|rk)_(live|test)_[A-Za-z0-9]{16,}|sk-[A-Za-z0-9_\-]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35}|SG\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}|npm_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]+)/', $value) === 1;
+    }
+
     public static function address(string $app, int $number, string $domain): string
     {
         $suffix = "-pr-{$number}";

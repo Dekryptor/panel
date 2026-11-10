@@ -782,6 +782,25 @@ test('previews get none of Production’s secrets, a new APP_KEY, and an address
         ->and(strlen(explode('.', Previews::address($long, 1234, 'p.example.com'))[0]))->toBe(63);
 });
 
+test('previews also drop credentials carried in URLs, webhook addresses and known token formats', function () {
+    [$workspace, $project, $web] = projectWithPreviews();
+    $last = collect(projectCommands())->last(fn ($c) => $c['job']['type'] === 'deploy' && $c['job']['service'] === 'shop')['job'];
+    projectDeploy($web, 'shop', [...$last, 'env' => [
+        'AMQP_URL' => 'amqp://user:pass@mq:5672',
+        'CLOUDINARY_URL' => 'cloudinary://123:abc@acme',
+        'SLACK_WEBHOOK_URL' => 'https://hooks.slack.com/services/T1/B2/xyz',
+        'ALERTS_HOOK' => 'https://discord.com/api/webhooks/1/abc',
+        'GH' => 'ghp_'.str_repeat('a', 36),
+        'OPENAI' => 'sk-'.str_repeat('b', 40),
+        'PUBLIC_URL' => 'https://example.com',
+        'MAIL_HOST' => 'smtp',
+    ]]);
+
+    pullRequest('opened', 78, str_repeat('d', 40));
+    $preview = collect(projectCommands())->last(fn ($c) => $c['job']['type'] === 'deploy' && $c['job']['service'] === 'shop-pr-78')['job'];
+    expect($preview['env'])->toBe(['PUBLIC_URL' => 'https://example.com', 'MAIL_HOST' => 'smtp']);
+});
+
 test('a promote is all or nothing: one app that can’t deploy stops them all, and unrelated environments are refused', function () {
     [$workspace, $project, $web, $db, $stage, $base] = projectWithProduction();
     $staging = makeStaging($workspace, $project, $web, $db, $stage, $base);

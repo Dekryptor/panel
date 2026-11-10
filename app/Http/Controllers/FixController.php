@@ -39,7 +39,7 @@ class FixController extends Controller
                 'service' => $f->service_name,
                 'createdAt' => $f->created_at->toIso8601String(),
             ])->values(),
-            'selected' => $selected === null ? null : $this->detail($selected->load(['user:id,name', 'decider:id,name'])),
+            'selected' => $selected === null ? null : $this->detail($selected->load(['user:id,name', 'decider:id,name']), $workspace->allows($user, WorkspacePermission::ManageMachines)),
             'machines' => $workspace->machines()->orderBy('name')->get()->map(fn ($m) => [
                 'id' => $m->id,
                 'name' => $m->name,
@@ -135,7 +135,7 @@ class FixController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function detail(AgentFix $fix): array
+    private function detail(AgentFix $fix, bool $seesOutput): array
     {
         $evidence = $fix->evidence ?? [];
 
@@ -151,11 +151,15 @@ class FixController extends Controller
             'confidence' => $fix->confidence,
             'model' => $fix->model,
             'error' => $fix->error,
-            'steps' => collect($fix->actions ?? [])->map(fn (array $a, int $i) => [
-                ...$a,
-                'label' => FixActions::TYPES[$a['type']] ?? $a['type'],
-                'result' => ($fix->results ?? [])[$i] ?? null,
-            ])->values(),
+            'steps' => collect($fix->actions ?? [])->map(function (array $a, int $i) use ($fix, $seesOutput) {
+                $result = ($fix->results ?? [])[$i] ?? null;
+
+                return [
+                    ...$a,
+                    'label' => FixActions::TYPES[$a['type']] ?? $a['type'],
+                    'result' => is_array($result) && ! $seesOutput ? array_diff_key($result, ['log' => true]) : $result,
+                ];
+            })->values(),
             'logs' => array_slice($evidence['logs'] ?? [], -30),
             'errors' => array_slice($evidence['errors'] ?? [], -10),
             'by' => $fix->user?->name,

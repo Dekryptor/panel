@@ -346,6 +346,11 @@ class DaemonJobQueue
         return self::atLeast($machine, (string) config('daemon.project_data_since'));
     }
 
+    public static function canExecEnv(Machine $machine): bool
+    {
+        return self::atLeast($machine, (string) config('daemon.exec_env_since'));
+    }
+
     public static function canClone(Machine $machine): bool
     {
         return self::atLeast($machine, (string) config('daemon.clone_since'));

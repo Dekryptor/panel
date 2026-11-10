@@ -6,6 +6,7 @@ use App\Actions\Workspaces\CreateWorkspace;
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Models\User;
+use App\Support\Auth\SignUps;
 use App\Support\Auth\Turnstile;
 use App\Support\Edition;
 use App\Support\Extensions\Extensions;
@@ -52,6 +53,10 @@ class CreateNewUser implements CreatesNewUsers
             'workspace' => ['nullable', ...$this->workspaceSlugs->rules()],
         ])->validate();
 
+        if (! SignUps::allows($input['email'])) {
+            throw ValidationException::withMessages(['email' => SignUps::CLOSED]);
+        }
+
         $token = $input['cf-turnstile-response'] ?? null;
         if (! app(Turnstile::class)->passes(is_string($token) ? $token : null, request()->ip())) {
             throw ValidationException::withMessages([
@@ -61,7 +66,6 @@ class CreateNewUser implements CreatesNewUsers
 
         RateLimiter::hit($limit, 3600);
 
-        // Only one can be first: sign-ups take turns under the lock, each checking after the one before commits.
         if (Edition::selfHosted() && ! app(SetupCode::class)->pending() && User::query()->doesntExist()) {
             return Cache::lock(self::FIRST_OWNER_LOCK, 30)
                 ->block(15, fn (): User => $this->createUser($input, owner: User::query()->doesntExist()));

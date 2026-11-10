@@ -242,6 +242,24 @@ test('a rollout goes a batch at a time and finishes', function () {
         ->and(Activity::query()->where('action', 'updates.rollout_done')->value('meta'))->toMatchArray(['state' => 'done', 'done' => 3]);
 });
 
+test('a rollout runs nothing more once whoever started it can no longer manage machines', function () {
+    $workspace = pkgWorkspace();
+    $admin = User::factory()->create();
+    $workspace->members()->attach($admin, ['role' => 'admin']);
+    $machines = collect(['web-1', 'web-2'])->map(fn (string $name) => pkgMachine($workspace, $name));
+    $machines->each(fn (Machine $m) => pkgSnapshot($m, ['curl' => ['8.5.0-2ubuntu10.5', '8.5.0-2ubuntu10.6']]));
+
+    $this->actingAs($admin)->postJson(pkgUrl($workspace, '/updates/rollouts'), ['packages' => [['name' => 'curl']], 'mode' => 'latest', 'batch_size' => 1])->assertCreated();
+    $rollout = PackageRollout::query()->sole();
+    $workspace->members()->updateExistingPivot($admin->id, ['role' => 'viewer']);
+
+    pkgFinish($machines[0], pkgJob($machines[0], 'package_install')->id, result: ['manager' => 'apt', 'applied' => true, 'reboot_required' => false]);
+    pkgTick();
+
+    expect(DaemonJob::query()->where('kind', 'package_install')->where('machine_id', $machines[1]->id)->exists())->toBeFalse()
+        ->and($rollout->targets()->where('machine_id', $machines[1]->id)->value('outcome'))->toContain('can’t manage machines any more');
+});
+
 test('a rollout stops at a failure, and skips machines that are offline or too old', function () {
     $workspace = pkgWorkspace();
     $offline = pkgMachine($workspace, 'a-offline', ['last_seen_at' => now()->subMinutes(10)]);

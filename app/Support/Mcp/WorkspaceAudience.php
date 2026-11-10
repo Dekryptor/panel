@@ -9,6 +9,8 @@ use App\Models\McpOAuthClient;
 use App\Models\McpToken;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Auth\GoogleTeamAccess;
+use App\Support\ConsoleLock;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -47,10 +49,17 @@ final class WorkspaceAudience extends OAuthAudience
             if ($workspace === null || ! $workspaces->contains('id', $workspace->id)) {
                 return OAuthPage::problem("You’re signed in as {$user->email}, who isn’t a member of the workspace this app asked for. Sign in as someone who is, or ask to be invited.");
             }
+            if (! self::signedInAsRequired($workspace, $user)) {
+                return OAuthPage::problem("{$workspace->name} asks you to sign in with Google using your company account. Sign out, sign in that way, then connect again.");
+            }
             $workspaces = $workspaces->where('id', $workspace->id)->values();
         }
         if ($workspaces->isEmpty()) {
             return OAuthPage::problem('You’re not in any workspace yet. Create one first, then connect again.');
+        }
+        $workspaces = $workspaces->filter(fn (Workspace $w) => self::signedInAsRequired($w, $user))->values();
+        if ($workspaces->isEmpty()) {
+            return OAuthPage::problem('Your workspaces ask you to sign in with Google using your company account. Sign out, sign in that way, then connect again.');
         }
 
         $requested = Scopes::normalise((string) $request->query('scope', implode(' ', Scopes::ALL)));
@@ -83,8 +92,13 @@ final class WorkspaceAudience extends OAuthAudience
         if ($workspace === null) {
             return back()->withErrors(['workspace' => 'Choose a workspace you’re a member of.']);
         }
-        if (! $workspace->satisfiesTwoFactor($user)) {
-            return back()->withErrors(['workspace' => "{$workspace->name} requires two-factor sign-in; set it up first."]);
+        if (! $workspace->satisfiesTwoFactor($user, request())) {
+            return back()->withErrors(['workspace' => $user->passkeys()->exists()
+                ? "{$workspace->name} requires two-factor sign-in. Sign out and back in with your passkey, or set up an authenticator app."
+                : "{$workspace->name} requires two-factor sign-in; set it up first."]);
+        }
+        if (! self::signedInAsRequired($workspace, $user)) {
+            return back()->withErrors(['workspace' => "{$workspace->name} asks you to sign in with Google using your company account."]);
         }
 
         $scopes = [Scopes::READ];
@@ -94,11 +108,23 @@ final class WorkspaceAudience extends OAuthAudience
                 if (! $user->hasEnabledTwoFactorAuthentication()) {
                     return back()->withErrors(['commands' => 'Running commands needs two-factor authentication on your account.']);
                 }
+                if (! app(ConsoleLock::class)->unlockedWith($user, $choices['code'] ?? null)) {
+                    return back()->withErrors(['commands' => 'Enter the code from your authenticator app to allow running commands.']);
+                }
                 $scopes[] = Scopes::COMMANDS;
             }
         }
 
         return new OAuthGrant($scopes, OAuth::resource($workspace), $workspace);
+    }
+
+    private static function signedInAsRequired(Workspace $workspace, User $user): bool
+    {
+        $session = request()->hasSession() ? request()->session() : null;
+        $via = $session?->get(GoogleTeamAccess::VIA);
+        $hd = $session?->get(GoogleTeamAccess::HD);
+
+        return $workspace->satisfiesGoogleSignIn($user, is_string($via) ? $via : null, is_string($hd) ? $hd : null);
     }
 
     public function approved(User $user, McpOAuthClient $client, OAuthGrant $grant): void

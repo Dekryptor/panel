@@ -21,7 +21,10 @@ class DaemonReleaseController extends Controller
         $arch = DaemonRelease::arch((string) $request->query('arch', ''));
         abort_if($arch === null, 404);
 
-        $release = DaemonRelease::latest($channel, $arch);
+        $version = $request->query('version');
+        $release = is_string($version) && $version !== ''
+            ? DaemonRelease::query()->where('arch', $arch)->where('version', $version)->first()
+            : DaemonRelease::latest($channel, $arch);
         abort_if($release === null, 404);
 
         return response()->json($release->toCandidate());

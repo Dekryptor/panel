@@ -293,7 +293,6 @@ function draw(): void {
                 ];
             }),
         },
-        // Not lazy: hovering the stale series a lazy update leaves for a frame crashes echarts.
         { notMerge: true },
     );
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\WorkflowGraph;
 use App\Models\Concerns\CreditsWhoStartedIt;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -38,7 +39,7 @@ class WorkflowRun extends Model
     {
         return [
             'trigger' => 'array',
-            'graph' => 'array',
+            'graph' => WorkflowGraph::class,
             'steps' => 'array',
             'frontier' => 'array',
             'logs' => 'array',
@@ -72,18 +73,62 @@ class WorkflowRun extends Model
     /**
      * @return array<string, mixed>
      */
-    public function toPageProps(): array
+    public function toPageProps(bool $commandOutput = true): array
     {
+        $shown = $this->shown($commandOutput);
+
         return [
             'id' => $this->id,
             'state' => $this->state,
             'trigger' => $this->trigger,
             'user' => $this->startedByName(),
-            'steps' => (object) $this->steps,
-            'logs' => $this->logs,
+            'steps' => (object) $shown['steps'],
+            'logs' => $shown['logs'],
             'startedAt' => $this->started_at->toIso8601String(),
             'finishedAt' => $this->finished_at?->toIso8601String(),
             'seconds' => (int) $this->started_at->diffInSeconds($this->finished_at ?? now()),
         ];
+    }
+
+    /**
+     * @return array{steps: array<string, array<string, mixed>>, logs: list<array{t: int, node: string|null, level: string, message: string}>}
+     */
+    public function shown(bool $commandOutput): array
+    {
+        if ($commandOutput) {
+            return ['steps' => $this->steps ?? [], 'logs' => $this->logs ?? []];
+        }
+
+        $kinds = collect($this->graph['nodes'] ?? [])->mapWithKeys(fn (array $node) => [(string) ($node['id'] ?? '') => $node['kind'] ?? null]);
+        $runsCommands = fn (?string $node) => $node !== null && in_array($kinds[$node] ?? null, ['command', 'agent'], true);
+
+        $steps = [];
+        foreach ($this->steps ?? [] as $id => $step) {
+            if ($runsCommands((string) $id)) {
+                unset($step['summary']);
+                if (is_string($step['message'] ?? null)) {
+                    $step['message'] = self::withoutStdout($step['message']);
+                }
+            }
+            $steps[$id] = $step;
+        }
+
+        $logs = [];
+        foreach ($this->logs ?? [] as $line) {
+            if (! $runsCommands($line['node'])) {
+                $logs[] = $line;
+            } elseif ($line['level'] !== 'info') {
+                $logs[] = [...$line, 'message' => self::withoutStdout($line['message'])];
+            }
+        }
+
+        return ['steps' => $steps, 'logs' => $logs];
+    }
+
+    private static function withoutStdout(string $message): string
+    {
+        $at = mb_strpos($message, 'Command finished: ');
+
+        return $at === false ? $message : mb_substr($message, 0, $at).'Command finished';
     }
 }

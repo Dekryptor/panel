@@ -14,11 +14,6 @@ import AppButton from '@/components/workspace/AppButton.vue';
 import SubmitButton from '@/components/workspace/SubmitButton.vue';
 import ToggleSwitch from '@/components/workspace/ToggleSwitch.vue';
 
-/**
- * Where alerts go: email to the workspace's owners and admins, and a
- * webhook (a Slack or Discord incoming webhook works as is). And which
- * kinds go out at all, so a noisy one can be switched off on its own.
- */
 const props = defineProps<{
     alerts: { email: boolean; webhook: string | null; muted?: string[] };
 }>();

@@ -2,6 +2,7 @@
 
 namespace App\Support\Fixes;
 
+use App\Enums\WorkspacePermission;
 use App\Models\Activity;
 use App\Models\AgentFix;
 use App\Models\DaemonJob;
@@ -20,11 +21,19 @@ class FixRunner
         if ($fix->state !== 'needs_approval') {
             throw new RuntimeException('This fix isn’t waiting for approval any more.');
         }
+        if ($fix->machine->workspace_id !== $fix->workspace_id) {
+            throw new RuntimeException('This machine moved to another workspace.');
+        }
         if (($reason = $this->queue->unavailable($fix->machine)) !== null) {
             throw new RuntimeException($reason);
         }
 
-        $fix->forceFill(['state' => 'running', 'decided_by' => $user->id, 'decided_at' => now(), 'results' => []])->save();
+        $won = AgentFix::query()->whereKey($fix->id)->where('state', 'needs_approval')
+            ->update(['state' => 'running', 'decided_by' => $user->id, 'decided_at' => now(), 'results' => json_encode([])]);
+        if ($won === 0) {
+            throw new RuntimeException('This fix isn’t waiting for approval any more.');
+        }
+        $fix->refresh();
         Activity::record($fix->workspace_id, 'fix.approve', $fix->title ?? 'A fix', $fix->machine, $user, ['fix' => $fix->id, 'steps' => count($fix->actions ?? [])]);
         $this->next($fix, $user);
     }
@@ -84,8 +93,15 @@ class FixRunner
         }
 
         $step = FixActions::clean([$steps[$i]], $fix->machine)[0] ?? null;
-        if ($user === null || $step === null) {
-            $results[] = ['state' => 'failed', 'message' => $user === null ? 'Whoever approved it can’t act on the machine any more.' : 'That service isn’t on the machine, or isn’t managed by ServerOS, any more.'];
+        $allowed = $user !== null
+            && $fix->workspace->allows($user, WorkspacePermission::ManageMachines)
+            && $user->hasEnabledTwoFactorAuthentication();
+        if (! $allowed || $step === null || $fix->machine->workspace_id !== $fix->workspace_id) {
+            $results[] = ['state' => 'failed', 'message' => match (true) {
+                ! $allowed => 'Whoever approved it can’t act on the machine any more.',
+                $step === null => 'That service isn’t on the machine, or isn’t managed by ServerOS, any more.',
+                default => 'The machine moved to another workspace.',
+            }];
             $fix->forceFill(['results' => $results, 'state' => 'failed', 'finished_at' => now()])->save();
 
             return;

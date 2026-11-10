@@ -237,7 +237,7 @@ class ProjectController extends Controller
             'confirm' => ['nullable', 'string'],
         ]);
 
-        $containers = ($data['delete'] ?? false) ? Placement::containers($node->machine, $node->name) : [];
+        $containers = ($data['delete'] ?? false) && ! $node->machineMoved() ? Placement::containers($node->machine, $node->name) : [];
         if ($containers !== []) {
             if (($data['confirm'] ?? null) !== $node->name) {
                 throw ValidationException::withMessages(['confirm' => 'Type its name to confirm.']);
@@ -442,7 +442,7 @@ class ProjectController extends Controller
     public function updateSettings(Request $request, Workspace $workspace, Project $project, ProjectNode $node, AppSettings $settings): RedirectResponse
     {
         $this->owned($workspace, $project);
-        abort_unless($node->project_id === $project->id && $node->isApp(), 404);
+        abort_unless($node->project_id === $project->id && $node->isApp() && ! $node->machineMoved(), 404);
         Gate::authorize('manageMachines', $workspace);
         $data = $request->validate([
             'set' => ['array', 'max:50'],

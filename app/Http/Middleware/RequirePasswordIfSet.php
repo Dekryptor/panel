@@ -16,6 +16,10 @@ class RequirePasswordIfSet extends RequirePassword
             return $next($request);
         }
 
+        if ($this->shouldConfirmPassword($request, $passwordTimeoutSeconds === null ? null : (int) $passwordTimeoutSeconds) && ! $request->expectsJson()) {
+            $request->session()->reflash();
+        }
+
         return parent::handle($request, $next, $redirectToRoute, $passwordTimeoutSeconds);
     }
 }

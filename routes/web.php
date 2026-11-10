@@ -75,6 +75,7 @@ use App\Http\Middleware\RequirePasswordIfSet;
 use App\Http\Middleware\RequireWorkspaceGoogleSignIn;
 use App\Http\Middleware\RequireWorkspaceTwoFactor;
 use App\Http\Middleware\SendToCustomDomain;
+use App\Http\Middleware\StaffTwoFactor;
 use App\Models\SocialAccount;
 use App\Models\Workspace;
 use App\Support\Edition;
@@ -91,7 +92,6 @@ Route::get('auth/{provider}/callback', [SocialLoginController::class, 'callback'
 
 app(Extensions::class)->loadRoutes(Extensions::SIGN_IN);
 
-// Before the workspace subdomains, so these names never reach them.
 app(Extensions::class)->loadRoutes(Extensions::SUBDOMAINS);
 
 Route::get('_domain/handoff/{token}', [WorkspaceDomainController::class, 'handoff'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:30,1')->name('domains.handoff');
@@ -389,7 +389,7 @@ Route::middleware(['signed', 'throttle:30,1'])->group(function () {
         ->name('unsubscribe.store');
 });
 
-Route::middleware(['auth', 'verified', 'can:viewAdmin'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', 'verified', StaffTwoFactor::class, 'can:viewAdmin'])->prefix('admin')->name('admin.')->group(function () {
     app(Extensions::class)->loadRoutes(Extensions::ADMIN);
 });
 

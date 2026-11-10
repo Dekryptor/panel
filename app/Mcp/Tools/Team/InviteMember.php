@@ -8,6 +8,7 @@ use App\Mcp\Schema;
 use App\Mcp\Scopes;
 use App\Mcp\Tool;
 use App\Mcp\ToolError;
+use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Notifications\WorkspaceInvitationSent;
 use Illuminate\Support\Facades\Notification;
@@ -67,6 +68,8 @@ final class InviteMember extends Tool
         $problems = [];
         if ($role->isStaffRole() && ! $workspace->hasStaffRoles()) {
             $problems[] = 'Member and Viewer roles are on Pro and Business. Invite them as an Admin, or upgrade.';
+        } elseif (! $workspace->canGrant($context->user, Workspace::permissionsFor($role, $custom))) {
+            $problems[] = 'You can’t give a role with more access than your own. list_roles shows what each role can do.';
         }
         if ($workspace->members()->whereRaw('lower(users.email) = ?', [$data['email']])->exists()) {
             $problems[] = 'They’re already in this workspace.';

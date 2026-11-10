@@ -2,11 +2,14 @@
 
 namespace App\Support\Backups;
 
+use App\Support\Monitors\HostResolver;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 class S3Probe
 {
+    public function __construct(private readonly HostResolver $resolver) {}
+
     /**
      * @param  array{endpoint: string, region: string, bucket: string, access_key: string, secret_key: string, path_style: bool, prefix: string}  $s
      */
@@ -18,10 +21,19 @@ class S3Probe
         $path = '/'.($s['path_style'] ? $s['bucket'].'/' : '').implode('/', array_map('rawurlencode', explode('/', $key)));
         $headers = $this->sign($s, $host, $path, $body, gmdate('Ymd\THis\Z'));
 
+        $name = (string) parse_url("https://{$host}", PHP_URL_HOST);
+        $port = parse_url("https://{$host}", PHP_URL_PORT) ?? 443;
+        $addresses = $name === '' ? [] : $this->resolver->resolveOnLan($name);
+        if ($addresses === []) {
+            return "Couldn't reach {$s['endpoint']}, or it points into a private network.";
+        }
+        $ip = str_contains($addresses[0], ':') ? "[{$addresses[0]}]" : $addresses[0];
+
         try {
             $response = Http::withHeaders($headers)
                 ->withBody($body, 'text/plain')
                 ->timeout(15)
+                ->withOptions(['allow_redirects' => false, 'curl' => [CURLOPT_RESOLVE => ["{$name}:{$port}:{$ip}"]]])
                 ->put("https://{$host}{$path}");
         } catch (ConnectionException) {
             return "Couldn't reach {$s['endpoint']}. Check the endpoint.";
@@ -31,7 +43,7 @@ class S3Probe
             return null;
         }
 
-        $code = preg_match('/<Code>([^<]+)<\/Code>/', $response->body(), $m) === 1 ? $m[1] : null;
+        $code = preg_match('/<Code>([A-Za-z]{1,64})<\/Code>/', $response->body(), $m) === 1 ? $m[1] : null;
 
         return match ($code) {
             'NoSuchBucket' => "There's no bucket called {$s['bucket']} there.",

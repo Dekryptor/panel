@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools\Workflow;
 
+use App\Enums\WorkspacePermission;
 use App\Mcp\McpContext;
 use App\Models\Workflow;
 use App\Models\WorkflowRun;
@@ -46,6 +47,7 @@ final class WorkflowView
         $problems = Workflows::problems($found, $graph);
         $plan = $context->workspace->hasAutomations();
         $rules = $workflow->triggerRules();
+        $shown = $context->can(WorkspacePermission::ManageMachines) ? $graph : WorkflowSteps::withoutSecrets($graph);
 
         return [
             'id' => $workflow->id,
@@ -67,10 +69,10 @@ final class WorkflowView
             'nextRunAt' => $workflow->enabled ? $workflow->next_run_at?->toIso8601String() : null,
             'lastRunAt' => $workflow->last_run_at?->toIso8601String(),
             'updatedAt' => $workflow->updated_at?->toIso8601String(),
-            'graph' => self::graph($graph),
-            'steps' => self::steps($graph, $words, $found),
+            'graph' => self::graph($shown),
+            'steps' => self::steps($shown, $words, $found),
             'problems' => $problems,
-            'hints' => self::hints($graph, $words),
+            'hints' => self::hints($shown, $words),
             'canTurnOn' => $plan && $problems === [],
             'planAllows' => $plan,
             'recentRuns' => $runs > 0 ? $workflow->runs()->with('user:id,name')->latest('id')->limit($runs)->get()
@@ -206,7 +208,8 @@ final class WorkflowView
     /** @return array<string, mixed> */
     public static function run(WorkflowRun $run, McpContext $context, bool $full = true, int $logLines = 100): array
     {
-        $steps = $run->steps ?? [];
+        $shown = $run->shown($context->can(WorkspacePermission::ManageMachines));
+        $steps = $shown['steps'];
         $failed = collect($steps)->first(fn ($s) => ($s['unhandled'] ?? false) === true);
         $out = [
             'id' => $run->id,
@@ -226,7 +229,7 @@ final class WorkflowView
         }
 
         $nodes = collect($run->graph['nodes'] ?? [])->keyBy('id');
-        $logs = $run->logs ?? [];
+        $logs = $shown['logs'];
         $out['trigger']['data'] = (object) ($run->trigger['data'] ?? []);
         $out['steps'] = collect($steps)->map(fn (array $step, string $id) => array_filter([
             'id' => $id,

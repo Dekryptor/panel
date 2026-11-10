@@ -19,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $resource
  * @property CarbonImmutable $expires_at
  * @property CarbonImmutable|null $used_at
+ * @property bool $redirect_uri_sent
+ * @property int|null $mcp_token_id
  * @property-read McpOAuthClient $client
  * @property-read User $user
  * @property-read Workspace|null $workspace
@@ -33,7 +35,7 @@ class McpOAuthCode extends Model
 
     protected function casts(): array
     {
-        return ['scopes' => 'array', 'expires_at' => 'datetime', 'used_at' => 'datetime'];
+        return ['scopes' => 'array', 'expires_at' => 'datetime', 'used_at' => 'datetime', 'redirect_uri_sent' => 'boolean'];
     }
 
     /** @return BelongsTo<McpOAuthClient, $this> */

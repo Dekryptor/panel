@@ -11,6 +11,7 @@ use App\Models\Workspace;
 use App\Notifications\MonitorAlert;
 use App\Support\Workflows\WorkflowEngine;
 use App\Support\Workflows\WorkflowSteps;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
@@ -199,6 +200,32 @@ test('the webhook starts an enabled workflow with its JSON as data', function ()
     $this->postJson('/api/hooks/workflows/'.$token)->assertStatus(409);
 });
 
+test('trigger data reaches a command as variables, never as shell text', function () {
+    [$workspace, $machine] = flowWorkspace();
+    $workspace->owner->forceFill(['two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $machine->forceFill(['daemon_version' => 'v0.1.1-pre.36'])->save();
+    $workflow = flow($workspace, [
+        ['t', 'trigger', ['event' => 'webhook']],
+        ['c', 'command', ['machine_id' => $machine->id, 'service' => 'docker:aaa', 'command' => "echo {{data.ref}} \"{{trigger}}\" '{{data.ref}}' # {{data.x}}"], 't'],
+    ]);
+    $token = $workflow->rotateWebhook();
+    $workflow->save();
+
+    $this->postJson('/api/hooks/workflows/'.$token, ['ref' => 'main; touch /tmp/pwned $(id) `id`', 'x' => 'y'])->assertStatus(202);
+
+    $spec = DaemonJob::query()->where('kind', 'service_exec')->sole()->command['job'];
+    expect($spec['command'])->toBe("echo \${SERVEROS_V1} \"\${SERVEROS_V2}\" ''\"\${SERVEROS_V1}\"'' # \${SERVEROS_V3}")
+        ->and($spec['env']['SERVEROS_V1'])->toBe('main; touch /tmp/pwned $(id) `id`')
+        ->and($spec['env']['SERVEROS_V3'])->toBe('y')
+        ->and($spec['env'])->toHaveKey('SERVEROS_V2');
+
+    $this->travel(10)->minutes();
+    $machine->forceFill(['daemon_version' => 'v0.1.1-pre.30', 'last_seen_at' => now()])->save();
+    $this->postJson('/api/hooks/workflows/'.$token, ['ref' => 'main'])->assertStatus(202);
+    expect(DaemonJob::query()->where('kind', 'service_exec')->count())->toBe(1)
+        ->and(WorkflowRun::query()->latest('id')->first()->steps['c']['message'])->toContain('Update the ServerOS daemon on web-1');
+});
+
 test('events start the workflows waiting on them, once per cooldown', function () {
     [$workspace, $machine] = flowWorkspace();
     $workflow = flow($workspace, [
@@ -253,6 +280,55 @@ test('only people who manage machines change or run workflows; commands need two
 
     $other = flowWorkspace()[0];
     $this->actingAs($other->owner)->get(flowUrl($other, "/{$workflow->id}"))->assertNotFound();
+});
+
+test('an HTTP step’s URL and body are stored encrypted and hidden from people who can’t manage machines', function () {
+    [$workspace] = flowWorkspace();
+    $workflow = flow($workspace, [
+        ['t', 'trigger', ['event' => 'manual']],
+        ['h', 'http', ['method' => 'POST', 'url' => 'https://hooks.slack.com/services/T1/B2/SECRET', 'body' => '{"routing_key":"RK123"}'], 't'],
+    ]);
+    $viewer = User::factory()->create();
+    $workspace->members()->attach($viewer, ['role' => 'viewer']);
+
+    $raw = (string) DB::table('workflows')->where('id', $workflow->id)->value('graph');
+    expect($raw)->not->toContain('SECRET')->not->toContain('RK123')
+        ->and($workflow->fresh()->graph['nodes'][1]['rules']['url'])->toBe('https://hooks.slack.com/services/T1/B2/SECRET');
+
+    $text = mcpCall($workspace, mcpKey($workspace, $viewer), 'get_workflow', ['workflow' => $workflow->id])['text'];
+    expect($text)->not->toContain('SECRET')->not->toContain('RK123')
+        ->and(mcpCall($workspace, mcpKey($workspace), 'get_workflow', ['workflow' => $workflow->id])['text'])->toContain('RK123');
+
+    app(WorkflowEngine::class)->start($workflow->fresh(), 'manual', 'Run by hand', [], $workspace->owner);
+    $run = WorkflowRun::query()->sole();
+    expect((string) DB::table('workflow_runs')->where('id', $run->id)->value('graph'))->not->toContain('SECRET');
+    Http::assertSent(fn ($r) => $r->url() === 'https://hooks.slack.com/services/T1/B2/SECRET' && $r->body() === '{"routing_key":"RK123"}');
+
+    $this->actingAs($viewer)->get(flowUrl($workspace, "/{$workflow->id}?run={$run->id}"))
+        ->assertOk()
+        ->assertDontSee('SECRET')->assertDontSee('RK123')
+        ->assertInertia(fn (Assert $page) => $page->where('workflow.graph.nodes.1.rules.url', 'https://hooks.slack.com/…')->where('run.graph.nodes.1.rules.body', '[hidden]'));
+
+    $this->actingAs($workspace->owner)->get(flowUrl($workspace, "/{$workflow->id}"))
+        ->assertInertia(fn (Assert $page) => $page->where('workflow.graph.nodes.1.rules.url', 'https://hooks.slack.com/services/T1/B2/SECRET'));
+
+});
+
+test('existing HTTP step secrets are encrypted by the migration, and put back by its rollback', function () {
+    [$workspace] = flowWorkspace();
+    $workflow = flow($workspace, [['t', 'trigger', ['event' => 'manual']], ['h', 'http', ['method' => 'POST', 'url' => 'https://example.com/hook', 'body' => ''], 't']]);
+    $plain = json_encode(['nodes' => [['id' => 't', 'kind' => 'trigger', 'rules' => ['event' => 'manual']], ['id' => 'h', 'kind' => 'http', 'rules' => ['method' => 'POST', 'url' => 'https://example.com/hook?key=abc', 'body' => '{"k":"v"}']]], 'edges' => []]);
+    DB::table('workflows')->where('id', $workflow->id)->update(['graph' => $plain]);
+    $migration = require database_path('migrations/2026_12_11_000000_encrypt_workflow_http_secrets.php');
+
+    $migration->up();
+    $migration->up();
+    $raw = (string) DB::table('workflows')->where('id', $workflow->id)->value('graph');
+    expect($raw)->not->toContain('key=abc')->not->toContain('"k"')
+        ->and($workflow->fresh()->graph['nodes'][1]['rules'])->toBe(['method' => 'POST', 'url' => 'https://example.com/hook?key=abc', 'body' => '{"k":"v"}']);
+
+    $migration->down();
+    expect(json_decode((string) DB::table('workflows')->where('id', $workflow->id)->value('graph'), true))->toBe(json_decode($plain, true));
 });
 
 test('workflows need Pro', function () {
@@ -322,4 +398,29 @@ test('staff viewing as someone can run a workflow but not save one, which would 
 
     expect($workspace->workflows()->count())->toBe(1)
         ->and($workflow->fresh()->name)->toBe('Test flow');
+});
+
+test('a command step’s output reaches only people who manage machines', function () {
+    [$workspace, $machine] = flowWorkspace();
+    $workspace->owner->forceFill(['two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $viewer = User::factory()->create();
+    $workspace->members()->attach($viewer, ['role' => 'viewer']);
+    $workflow = flow($workspace, [
+        ['t', 'trigger', ['event' => 'manual']],
+        ['c', 'command', ['machine_id' => (string) $machine->id, 'service' => 'docker:aaa', 'command' => 'printenv'], 't'],
+    ]);
+    $run = app(WorkflowEngine::class)->start($workflow, 'manual', 'By hand', [], $workspace->owner, limited: false);
+    finishJob($machine, DaemonJob::query()->where('kind', 'service_exec')->sole(), 'succeeded', [
+        'log' => ['$ printenv', 'DB_PASSWORD=hunter2'], 'result' => ['exit_code' => 0, 'stdout' => 'DB_PASSWORD=hunter2'],
+    ]);
+    expect($run->fresh()->steps['c']['message'])->toBe('Command finished: DB_PASSWORD=hunter2');
+
+    $this->actingAs($viewer)->get(flowUrl($workspace, "/{$workflow->id}?run={$run->id}"))
+        ->assertDontSee('hunter2')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('run.steps.c.state', 'succeeded')
+            ->where('run.steps.c.message', 'Command finished'));
+
+    $this->actingAs($workspace->owner)->get(flowUrl($workspace, "/{$workflow->id}?run={$run->id}"))
+        ->assertInertia(fn (Assert $page) => $page->where('run.steps.c.message', 'Command finished: DB_PASSWORD=hunter2'));
 });

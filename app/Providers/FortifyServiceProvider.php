@@ -7,9 +7,11 @@ use App\Actions\Fortify\ResetUserPassword;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Responses\LoginResponse;
 use App\Http\Responses\LogoutResponse;
+use App\Http\Responses\PasswordResetLinkResponse;
 use App\Models\AccountEvent;
 use App\Models\SocialAccount;
 use App\Models\User;
+use App\Support\Auth\SignUps;
 use App\Support\Auth\Turnstile;
 use App\Support\Edition;
 use App\Support\Extensions\Extensions;
@@ -26,10 +28,12 @@ use Laravel\Fortify\Actions\AttemptToAuthenticate;
 use Laravel\Fortify\Actions\CanonicalizeUsername;
 use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
 use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
+use Laravel\Fortify\Contracts\FailedPasswordResetLinkRequestResponse;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use Laravel\Fortify\Contracts\LogoutResponse as LogoutResponseContract;
 use Laravel\Fortify\Contracts\RedirectsIfTwoFactorAuthenticatable;
 use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
+use Laravel\Fortify\Contracts\SuccessfulPasswordResetLinkRequestResponse;
 use Laravel\Fortify\Contracts\TwoFactorLoginResponse as TwoFactorLoginResponseContract;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
@@ -43,6 +47,8 @@ class FortifyServiceProvider extends ServiceProvider
         $this->app->singleton(TwoFactorLoginResponseContract::class, LoginResponse::class);
         $this->app->singleton(RegisterResponseContract::class, LoginResponse::class);
         $this->app->singleton(LogoutResponseContract::class, LogoutResponse::class);
+        $this->app->bind(SuccessfulPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
+        $this->app->bind(FailedPasswordResetLinkRequestResponse::class, PasswordResetLinkResponse::class);
         $this->app->bind(FortifyAuthenticatedSessionController::class, AuthenticatedSessionController::class);
     }
 
@@ -99,6 +105,7 @@ class FortifyServiceProvider extends ServiceProvider
             'oauthProviders' => SocialAccount::enabled(),
             'turnstileSiteKey' => Turnstile::siteKey(),
             ...(Edition::selfHosted() ? ['selfHosted' => true] : []),
+            ...(SignUps::open() ? [] : ['inviteOnly' => true]),
         ]));
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/TwoFactorChallenge'));

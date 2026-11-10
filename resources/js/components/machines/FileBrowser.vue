@@ -167,8 +167,6 @@ async function job(
     );
 }
 
-// In chunks: spreading a large file into fromCharCode at once overflows the stack.
-
 function toBase64(data: Uint8Array): string {
     let binary = '';
     for (let i = 0; i < data.length; i += 0x8000) {

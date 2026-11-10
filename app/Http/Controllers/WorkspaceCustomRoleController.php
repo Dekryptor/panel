@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\WorkspacePermission;
+use App\Enums\WorkspaceRole;
 use App\Models\Activity;
 use App\Models\Workspace;
 use App\Models\WorkspaceCustomRole;
@@ -12,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class WorkspaceCustomRoleController extends Controller
@@ -41,10 +43,13 @@ class WorkspaceCustomRoleController extends Controller
     }
 
     #[Audited]
-    public function destroy(Workspace $workspace, WorkspaceCustomRole $role): RedirectResponse
+    public function destroy(Request $request, Workspace $workspace, WorkspaceCustomRole $role): RedirectResponse
     {
         Gate::authorize('manageMembers', $workspace);
         abort_unless($role->workspace_id === $workspace->id, 404);
+        if (! $workspace->canGrant($request->user(), Workspace::permissionsFor(WorkspaceRole::Viewer, $role))) {
+            throw ValidationException::withMessages(['role' => 'This role has access you don’t, so you can’t delete it.']);
+        }
 
         $role->delete();
         Activity::record($workspace, 'role.delete', $role->name);
@@ -75,6 +80,14 @@ class WorkspaceCustomRoleController extends Controller
             'name.not_in' => 'That name is taken by a built-in role.',
             'name.unique' => 'There’s already a role with that name.',
         ]);
+
+        if ($role !== null && ! $workspace->canGrant($request->user(), Workspace::permissionsFor(WorkspaceRole::Viewer, $role))) {
+            throw ValidationException::withMessages(['permissions' => 'This role has access you don’t, so you can’t change it.']);
+        }
+        $requested = array_values(array_map(fn (string $p) => WorkspacePermission::from($p), $data['permissions']));
+        if (! $workspace->canGrant($request->user(), $requested)) {
+            throw ValidationException::withMessages(['permissions' => 'You can’t give a role more access than your own.']);
+        }
 
         return [
             'name' => trim($data['name']),

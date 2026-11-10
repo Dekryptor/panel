@@ -69,12 +69,13 @@ final class RefResolver
     /** @return array{commit: string, ref: string|null} */
     private function viaGitHub(string $owner, string $name, ?string $ref, ?Workspace $workspace): array
     {
-        if ($ref === null) {
+        $shared = $this->token === null && filled(config('services.github.token'));
+        if ($ref === null || $shared) {
             $repo = $this->github("repos/{$owner}/{$name}");
-            if ($repo === null || ! is_string($repo['default_branch'] ?? null)) {
+            if ($repo === null || ! is_string($repo['default_branch'] ?? null) || ($shared && ! RepositoryDetector::isPublic($repo))) {
                 throw new ToolError(RepositoryDetector::notFound($workspace, $owner));
             }
-            $ref = $repo['default_branch'];
+            $ref ??= $repo['default_branch'];
         }
 
         $commit = $this->github("repos/{$owner}/{$name}/commits/".rawurlencode($ref));

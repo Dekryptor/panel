@@ -30,6 +30,9 @@ class DiagnoseFix implements ShouldQueue
         }
 
         try {
+            if ($fix->machine->workspace_id !== $fix->workspace_id) {
+                throw new RuntimeException('The machine moved to another workspace.');
+            }
             $diagnoser->diagnose($fix);
         } catch (Throwable $e) {
             if (! $e instanceof RuntimeException) {

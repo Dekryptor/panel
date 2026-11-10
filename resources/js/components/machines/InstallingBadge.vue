@@ -52,7 +52,6 @@ const stages: Record<
     },
 };
 
-// Full class names, so Tailwind's scanner finds them.
 const themedStages: Record<
     Stage,
     { badge: string; text: string; spinner: string }

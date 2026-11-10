@@ -31,7 +31,7 @@ class StoreWorkspaceRequest extends FormRequest
             return collect();
         }
 
-        return MovableMachines::for($this->user())->whereIn('id', $ids)->values();
+        return MovableMachines::for($this->user(), $this)->whereIn('id', $ids)->values();
     }
 
     /**

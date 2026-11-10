@@ -11,9 +11,6 @@ use App\Support\Monitors\AlertKinds;
 use App\Support\Monitors\HostResolver;
 use Illuminate\Validation\Rule;
 
-/**
- * Change where alerts go, as the Alerts dialog does.
- */
 final class UpdateAlertSettings extends Tool
 {
     public function name(): string

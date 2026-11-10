@@ -24,7 +24,7 @@ final class McpServer
 
     public const VERSION = '1.0.0';
 
-    private const SECRET_ARGUMENTS = ['env', 'extra_env', 'set', 'password', 'secret', 'token', 'authorization', 'headers', 'access_key', 'secret_key'];
+    private const SECRET_ARGUMENTS = ['env', 'extra_env', 'set', 'password', 'secret', 'token', 'authorization', 'headers', 'access_key', 'secret_key', 'webhook', 'webhook_url'];
 
     private const SECRET_NAME = '/(pass(word|wd)?|secret|token|api_?key|private_?key|credential|auth)/i';
 
@@ -254,7 +254,7 @@ final class McpServer
             } elseif (is_array($value)) {
                 $out[$key] = $depth >= 3 ? '[…]' : self::redact($value, $depth + 1);
             } elseif (is_string($value)) {
-                $out[$key] = Str::limit($value, 500);
+                $out[$key] = Str::limit((string) preg_replace('#(://)[^/@\s]+@#', '$1[hidden]@', $value), 500);
             } else {
                 $out[$key] = $value;
             }

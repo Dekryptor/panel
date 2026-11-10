@@ -36,7 +36,6 @@ final class RemoteImage
                 ->withOptions([
                     'allow_redirects' => false,
                     'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$ip}"]],
-                    // Guzzle refuses CURLOPT_MAXFILESIZE, so the size is capped here.
                     'progress' => function (int $total, int $downloaded) use ($maxBytes): void {
                         if ($total > $maxBytes || $downloaded > $maxBytes) {
                             throw new ToolError('The image must be under '.round($maxBytes / 1024 / 1024).' MB.');

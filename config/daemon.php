@@ -15,6 +15,7 @@ return [
     'log_ip_masking_since' => env('DAEMON_LOG_IP_MASKING_SINCE', '0.1.1-pre.21'),
 
     'project_data_since' => env('DAEMON_PROJECT_DATA_SINCE', '0.1.1-pre.35'),
+    'exec_env_since' => env('DAEMON_EXEC_ENV_SINCE', '0.1.1-pre.34'),
 
     'log_skip_since' => env('DAEMON_LOG_SKIP_SINCE', '0.1.1-pre.22'),
     'disk_usage_since' => env('DAEMON_DISK_USAGE_SINCE', '0.1.1-pre.19'),
@@ -27,6 +28,7 @@ return [
     'install_url' => env('DAEMON_INSTALL_URL', rtrim((string) env('APP_URL', ''), '/').'/install.sh'),
     'install_script' => null,
     'releases_url' => env('DAEMON_RELEASES_URL', 'https://releases.serveros.com'),
+    'release_pubkey' => env('DAEMON_RELEASE_PUBKEY'),
     'release_feed_url' => env('DAEMON_RELEASE_FEED_URL', 'https://serveros.com/api/daemon/releases/latest'),
     'releases_path' => env('DAEMON_RELEASES_PATH', public_path('releases/daemon')),
     'deploy_token' => env('SERVEROS_DEPLOY_TOKEN'),

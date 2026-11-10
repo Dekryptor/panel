@@ -1,7 +1,10 @@
 <?php
 
 use App\Enums\Plan;
+use App\Http\Middleware\BindCustomDomainSession;
 use App\Models\Activity;
+use App\Models\Machine;
+use App\Models\StatusPage;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceDomain;
@@ -258,4 +261,146 @@ test('a private status page on its own hostname says so there, with a way to sig
         ->where('statusPages.0.fleet', true)
         ->where('statusPages.0.public', false)
         ->where('statusPages.0.settingsUrl', 'https://acme.'.config('app.domain').'/settings/status-page'));
+});
+
+function domainStatusPage(Workspace $workspace, string $slug): StatusPage
+{
+    $page = new StatusPage(['slug' => $slug, 'enabled' => true, 'public' => true, 'title' => $workspace->name.' status', 'include_new' => true, 'show_uptime' => true, 'services' => []]);
+    $page->machine_id = Machine::factory()->for($workspace)->create()->id;
+    $page->save();
+
+    return $page;
+}
+
+test('a session handed off to a domain works only there', function () {
+    [$workspace] = domainWorkspace();
+    liveDomain($workspace);
+    [$other] = domainWorkspace(Plan::Business, 'other');
+    $member = User::factory()->create();
+    $workspace->members()->attach($member, ['role' => 'member']);
+    $other->members()->attach($member, ['role' => 'admin']);
+
+    $go = $this->actingAs($member)->get('https://'.$workspace->subdomain().'/domains/go?to=/machines')->headers->get('Location');
+    auth()->logout();
+    session()->flush();
+
+    $this->get($go)->assertRedirect('/machines');
+    $this->get('https://ops.acme.test/machines')->assertOk();
+    $this->assertAuthenticatedAs($member);
+
+    $this->get('https://'.$other->subdomain().'/machines')->assertRedirect(rtrim(config('app.url'), '/').'/login');
+    $this->assertGuest();
+    expect(session(BindCustomDomainSession::KEY))->toBeNull();
+});
+
+test('account settings on a domain open on ours, and the dashboard stays there', function () {
+    [$workspace] = domainWorkspace();
+    liveDomain($workspace);
+    $user = $workspace->owner;
+    $email = $user->email;
+    $main = rtrim(config('app.url'), '/');
+    $sub = 'https://'.$workspace->subdomain();
+
+    $this->actingAs($user)->get('https://ops.acme.test/settings/security')->assertRedirect("{$sub}/settings/security");
+    $this->actingAs($user)->get('https://ops.acme.test/settings/api')->assertRedirect("{$sub}/settings/api");
+    $this->actingAs($user)->get('https://ops.acme.test/settings/security', ['X-Inertia' => 'true'])
+        ->assertStatus(409)->assertHeader('X-Inertia-Location', "{$sub}/settings/security");
+    $this->actingAs($user)->patch('https://ops.acme.test/settings/profile', ['name' => 'Mallory', 'email' => 'mallory@example.com'])
+        ->assertRedirect("{$main}/settings/profile");
+    $this->actingAs($user)->get('https://ops.acme.test/oauth/authorize?client_id=x')->assertRedirect("{$main}/oauth/authorize?client_id=x");
+    $this->actingAs($user)->post('https://ops.acme.test/user/two-factor-authentication')->assertRedirect("{$main}/user/two-factor-authentication");
+    expect($user->fresh()->email)->toBe($email)
+        ->and($user->fresh()->name)->not->toBe('Mallory');
+
+    $this->actingAs($user)->get('https://ops.acme.test/machines')->assertOk();
+
+    session()->flush();
+    $this->actingAs($user)->get("{$sub}/settings/api")->assertOk();
+});
+
+test('signing in on a domain doesn’t remember the browser', function () {
+    [$workspace] = domainWorkspace();
+    liveDomain($workspace);
+    $user = User::factory()->create();
+    $workspace->members()->attach($user, ['role' => 'member']);
+
+    $response = $this->post('https://ops.acme.test/login', ['email' => $user->email, 'password' => 'password', 'remember' => '1']);
+
+    $this->assertAuthenticatedAs($user);
+    expect(collect($response->headers->getCookies())->contains(fn ($cookie) => str_starts_with($cookie->getName(), 'remember_web_')))->toBeFalse()
+        ->and(session(BindCustomDomainSession::KEY))->toBe('ops.acme.test');
+});
+
+test('a dashboard domain serves its own workspace’s status pages only', function () {
+    [$workspace] = domainWorkspace();
+    liveDomain($workspace);
+    domainStatusPage($workspace, 'acme-web');
+    [$other] = domainWorkspace(Plan::Business, 'other');
+    domainStatusPage($other, 'account-notice');
+
+    $this->get('https://ops.acme.test/status/acme-web')->assertOk();
+    $this->get('https://ops.acme.test/status/account-notice')->assertNotFound();
+    $this->get('https://ops.acme.test/status/account-notice/status.json')->assertNotFound();
+    $this->get('https://ops.acme.test/status/account-notice/badge.svg')->assertNotFound();
+    $this->get('https://ops.acme.test/status/account-notice/embed')->assertNotFound();
+    $this->get('https://ops.acme.test/status/account-notice/og.png')->assertNotFound();
+    $this->get('https://ops.acme.test/status/account-notice/feed.atom')->assertNotFound();
+    $this->postJson('https://ops.acme.test/status/account-notice/subscribe', ['email' => 'a@example.com'])->assertNotFound();
+    $this->get('https://'.config('app.domain').'/status/account-notice')->assertOk();
+});
+
+test('a status domain follows its page when it’s renamed, and never serves a page someone else takes', function () {
+    [$workspace] = domainWorkspace();
+    $page = domainStatusPage($workspace, 'acme-web');
+    app(CustomDomains::class)->connect($workspace, WorkspaceDomain::STATUS, 'status.acme.test', page: 'acme-web');
+    cfLive(['status.acme.test']);
+    app(CustomDomains::class)->refresh(WorkspaceDomain::query()->sole());
+    $this->get('https://status.acme.test/')->assertOk()->assertInertia(fn (Assert $p) => $p->where('status.title', $workspace->name.' status'));
+
+    $page->update(['slug' => 'acme-web-2']);
+    expect(WorkspaceDomain::query()->sole()->status_page_slug)->toBe('acme-web-2');
+    $this->get('https://status.acme.test/')->assertOk()->assertInertia(fn (Assert $p) => $p->where('status.title', $workspace->name.' status'));
+
+    [$other] = domainWorkspace(Plan::Business, 'other');
+    domainStatusPage($other, 'acme-web');
+    $page->machine->delete();
+    domainStatusPage($other, 'acme-web-2');
+    $this->get('https://status.acme.test/')->assertNotFound();
+});
+
+test('a session on a domain can’t reach the member’s other workspaces', function () {
+    [$workspace] = domainWorkspace();
+    liveDomain($workspace);
+    [$other] = domainWorkspace(Plan::Business, 'other');
+    $member = User::factory()->create();
+    $workspace->members()->attach($member, ['role' => 'member']);
+    $other->members()->attach($member, ['role' => 'admin']);
+    $machine = Machine::factory()->for($other)->create(['name' => 'billing-db']);
+    $main = rtrim(config('app.url'), '/');
+
+    $this->actingAs($member)->get('https://ops.acme.test/workspaces/movable-machines', ['Accept' => 'application/json'])
+        ->assertRedirect("{$main}/workspaces/movable-machines");
+    $this->actingAs($member)->get('https://ops.acme.test/workspaces')->assertRedirect("{$main}/workspaces");
+    $this->actingAs($member)->post('https://ops.acme.test/workspaces', ['name' => 'Taken', 'machines' => [$machine->id]])
+        ->assertRedirect("{$main}/workspaces");
+    $this->actingAs($member)->post('https://ops.acme.test/invitations/abc/accept')->assertRedirect("{$main}/invitations/abc/accept");
+
+    expect($machine->fresh()->workspace_id)->toBe($other->id)
+        ->and(Workspace::query()->where('name', 'Taken')->exists())->toBeFalse();
+});
+
+test('a session from a domain ends once the domain is gone', function () {
+    [$workspace] = domainWorkspace();
+    $domain = liveDomain($workspace);
+    $member = User::factory()->create();
+    $workspace->members()->attach($member, ['role' => 'member']);
+
+    $this->actingAs($member)->get('https://ops.acme.test/machines')->assertOk();
+    expect(session(BindCustomDomainSession::KEY))->toBe('ops.acme.test');
+
+    $domain->delete();
+    CustomDomains::forget();
+
+    $this->get('https://ops.acme.test/settings/profile')->assertRedirect();
+    $this->assertGuest();
 });

@@ -65,6 +65,12 @@ class ProjectData
             return;
         }
 
+        if ($node->machineMoved() || $origin->machine->workspace_id !== $node->project->workspace_id) {
+            $node->forceFill(['data_state' => 'failed', 'data_error' => 'One of the machines moved to another workspace.'])->save();
+
+            return;
+        }
+
         $wait = fn (string $why) => $node->forceFill(['data_state' => 'waiting', 'data_error' => $why])->save();
 
         $source = Deploys::lastDeploy($origin->machine, $origin->name);

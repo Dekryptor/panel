@@ -9,6 +9,7 @@ use App\Models\DocSection;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceAiKey;
+use App\Support\Assistant\AssistantAgent;
 use App\Support\Docs\DocsSearch;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -138,6 +139,53 @@ test('Approve all covers later changes in the chat, but never changes to the mac
         ->and($asked)->toHaveCount(1)
         ->and($asked[0]['tool'])->toBe('install_packages')
         ->and($asked[0]['alwaysAsk'])->toBeTrue();
+});
+
+test('Approve all never covers invites, role changes or deploys', function () {
+    config()->set('services.groq.key', 'test-key');
+    config()->set('services.groq.model', 'openai/gpt-oss-120b');
+    Http::fake(['api.groq.com/*' => Http::sequence()
+        ->push(groqTurn(calls: [['load_tools', ['names' => ['create_machine_group', 'invite_member']]]]))
+        ->push(groqTurn(calls: [['create_machine_group', ['name' => 'Web']]]))
+        ->push(groqTurn(calls: [['invite_member', ['email' => 'evil@example.com', 'role' => 'admin']]]))]);
+
+    $workspace = Workspace::factory()->create(['mcp_call_limit_override' => -1]);
+    $url = 'https://'.$workspace->host().'/assistant';
+
+    $events = assistantEvents($this->actingAs($workspace->owner)->post($url, ['message' => 'x'])->streamedContent());
+    $approval = collect($events)->firstWhere('type', 'approval');
+    $events = assistantEvents($this->actingAs($workspace->owner)->post("{$url}/decide", [
+        'chat' => collect($events)->firstWhere('type', 'chat')['id'], 'call' => $approval['id'], 'approve' => true, 'always' => true,
+    ])->streamedContent());
+
+    $asked = collect($events)->where('type', 'approval')->values();
+    expect($asked)->toHaveCount(1)
+        ->and($asked[0]['tool'])->toBe('invite_member')
+        ->and($asked[0]['alwaysAsk'])->toBeTrue()
+        ->and($workspace->invitations()->count())->toBe(0);
+
+    $always = (new ReflectionClassConstant(AssistantAgent::class, 'ALWAYS_ASK'))->getValue();
+    expect($always)->toContain('post_status_incident', 'update_status_incident', 'mute_monitor', 'pause_monitor', 'adopt_service');
+});
+
+test('the approval card shows every argument in full, settings and nested values included', function () {
+    config()->set('services.groq.key', 'test-key');
+    config()->set('services.groq.model', 'openai/gpt-oss-120b');
+    $long = str_repeat('a', 400).'-the-end';
+    Http::fake(['api.groq.com/*' => Http::sequence()
+        ->push(groqTurn(calls: [['load_tools', ['names' => ['update_app_settings']]]]))
+        ->push(groqTurn(calls: [['update_app_settings', [
+            'machine' => 'web-1', 'app' => 'shop', 'set' => ['API_URL' => 'https://evil.test', 'AUTH_CALLBACK' => $long],
+            'a' => 1, 'b' => 2, 'c' => 3, 'd' => 4, 'e' => 5, 'f' => 6, 'g' => 7, 'h' => 8, 'i' => 9, 'j' => ['k' => ['l' => ['m' => ['n' => 'deep']]]],
+        ]]]))]);
+
+    $workspace = Workspace::factory()->create(['mcp_call_limit_override' => -1]);
+    $events = assistantEvents($this->actingAs($workspace->owner)->post('https://'.$workspace->host().'/assistant', ['message' => 'x'])->streamedContent());
+    $fields = collect(collect($events)->firstWhere('type', 'approval')['fields'])->pluck('value', 'label');
+
+    expect($fields['Set'])->toContain('API_URL')->toContain('https://evil.test')->toContain($long)
+        ->and($fields['J'])->toContain('deep')
+        ->and($fields)->toHaveCount(13);
 });
 
 test('a call to a tool it has not loaded yet runs anyway, instead of Groq’s 400', function () {

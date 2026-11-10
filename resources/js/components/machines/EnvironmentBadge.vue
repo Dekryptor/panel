@@ -54,7 +54,6 @@ const variants: Record<
     },
 };
 
-// Full class names, so Tailwind's scanner finds them.
 const themedVariants: Record<
     Environment,
     { badgeClass: string; dotClass: string; textClass: string }

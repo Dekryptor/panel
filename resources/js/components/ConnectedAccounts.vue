@@ -78,7 +78,6 @@ function since(iso: string | null): string {
                         }}
                     </p>
                 </div>
-                <!-- A plain link, not an Inertia one: the OAuth flow leaves the site. -->
                 <a
                     v-if="!account.connected"
                     :href="`/settings/connections/${account.provider}`"

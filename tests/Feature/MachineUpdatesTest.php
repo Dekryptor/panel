@@ -84,3 +84,14 @@ test('picking which updates to install needs a daemon that can', function () {
     $this->actingAs($workspace->owner)->postJson("{$url}/updates", $pick)->assertAccepted();
     Http::assertSent(fn ($r) => str_ends_with($r->url(), '/commands') && $r['command']['job'] == ['type' => 'package_install', 'packages' => ['openssl', 'libc6:amd64']]);
 });
+
+test('a package name ending in a dash is refused, since apt would remove it', function () {
+    [$workspace, $machine, $url] = updatesMachine();
+    $machine->forceFill(['daemon_version' => 'v0.1.1-pre.1'])->save();
+
+    $this->actingAs($workspace->owner)->postJson("{$url}/updates", ['security_only' => false, 'packages' => ['openssl', 'openssh-server-']])
+        ->assertJsonValidationErrors(['packages.1' => 'A package name can’t end with a dash.']);
+    Http::assertNotSent(fn ($r) => str_ends_with($r->url(), '/commands'));
+
+    $this->actingAs($workspace->owner)->postJson("{$url}/updates", ['security_only' => false, 'packages' => ['g++', 'linux-image-6.8.0-45-generic', 'a']])->assertAccepted();
+});

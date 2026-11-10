@@ -71,7 +71,6 @@ const form = useForm({
     machine_id: null as number | null,
 });
 
-// Not reset(): a submit makes the sent values the form's defaults.
 watch(open, (isOpen) => {
     if (!isOpen) return;
     const incident = props.incident;

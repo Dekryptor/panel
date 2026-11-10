@@ -130,6 +130,15 @@ class McpToken extends Model
         return $token;
     }
 
+    public static function revokeFor(Workspace $workspace, User $user): void
+    {
+        self::query()->active()
+            ->where('workspace_id', $workspace->id)
+            ->where('user_id', $user->id)
+            ->get()
+            ->each(fn (self $token) => $token->revoke());
+    }
+
     public function allows(string $scope): bool
     {
         return in_array($scope, $this->scopes ?? [], true);

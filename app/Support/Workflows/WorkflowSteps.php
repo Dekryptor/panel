@@ -285,4 +285,29 @@ final class WorkflowSteps
     {
         return collect($graph['nodes'])->contains(fn (array $n) => in_array($n['kind'], ['command', 'release', 'agent'], true));
     }
+
+    /**
+     * @param  array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}  $graph
+     * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
+     */
+    public static function withoutSecrets(array $graph): array
+    {
+        foreach ($graph['nodes'] as $i => $node) {
+            if (($node['kind'] ?? null) !== 'http') {
+                continue;
+            }
+            $rules = (array) ($node['rules'] ?? []);
+            if (filled($rules['url'] ?? null)) {
+                $host = parse_url((string) $rules['url'], PHP_URL_HOST);
+                $scheme = parse_url((string) $rules['url'], PHP_URL_SCHEME);
+                $rules['url'] = is_string($host) && is_string($scheme) ? strtolower($scheme).'://'.$host.'/…' : '[hidden]';
+            }
+            if (filled($rules['body'] ?? null)) {
+                $rules['body'] = '[hidden]';
+            }
+            $graph['nodes'][$i]['rules'] = is_object($node['rules'] ?? null) ? (object) $rules : $rules;
+        }
+
+        return $graph;
+    }
 }

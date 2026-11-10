@@ -19,6 +19,7 @@ class ResolveCustomDomain
         }
 
         $request->attributes->set('custom_domain', $host);
+        $request->attributes->set('custom_workspace', $target['workspace']);
         $request->attributes->set('custom_uri', (string) $request->server->get('REQUEST_URI', '/'));
         config(['session.domain' => null]);
 

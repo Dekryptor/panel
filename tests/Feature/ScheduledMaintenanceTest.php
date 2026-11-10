@@ -182,6 +182,23 @@ test('a machine that isn’t reporting when it starts gets the window, but nothi
         ->and($window->fresh()->outcome)->toContain('wasn’t reporting');
 });
 
+test('a planned restart runs nothing once whoever planned it has been removed from the workspace', function () {
+    [$workspace, $machine] = plannedSetup();
+    $member = User::factory()->create();
+    $workspace->members()->attach($member, ['role' => 'member']);
+    $this->actingAs($member)->post(plannedUrl($workspace, "/machines/{$machine->id}/maintenance/scheduled"), [
+        'starts_at' => now()->addDays(2)->setTime(4, 0)->toIso8601String(), 'minutes' => 30, 'reason' => 'Kernel update', 'public' => true, 'action' => 'reboot',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+    $window = MaintenanceWindow::query()->latest('id')->firstOrFail();
+    $workspace->members()->detach($member->id);
+
+    plannedTravel($machine, $window->starts_at->copy()->addSeconds(5));
+    app(ScheduledMaintenance::class)->tick();
+
+    expect(DaemonJob::query()->count())->toBe(0)
+        ->and($window->fresh()->outcome)->toContain('can’t manage machines any more');
+});
+
 test('calling it off takes it off the status page, and ending one under way ends maintenance', function () {
     [$workspace, $machine, $page] = plannedSetup();
     $window = planMaintenance($workspace, $machine);

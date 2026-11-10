@@ -14,7 +14,7 @@ class GrantAdmin extends Command
     public function handle(): int
     {
         $email = strtolower(trim((string) $this->argument('email')));
-        $user = User::query()->whereRaw('lower(email) = ?', [$email])->first();
+        $user = User::query()->whereRaw('lower(email) = ?', [$email])->orderBy('id')->first();
         if ($user === null) {
             $this->error("No account uses {$email}. They need to sign up first.");
 
@@ -28,6 +28,8 @@ class GrantAdmin extends Command
             $this->info("{$user->email} is no longer an admin.");
         } elseif ($user->email_verified_at === null) {
             $this->warn("{$user->email} is an admin, but can't open /admin until their email is verified.");
+        } elseif ($user->two_factor_confirmed_at === null) {
+            $this->warn("{$user->email} is an admin, but can't open /admin until they turn on two-factor.");
         } else {
             $this->info("{$user->email} is an admin.");
         }

@@ -466,7 +466,6 @@ export default defineConfig({
             prefix: 'virtual:panel-solar-icon/',
         }),
         panelI18n(),
-        // Named, or the plugin picks resources/js/app.ts as the SSR entry.
         inertia({ ssr: siteSsr ?? false }),
         packagePublicFiles(),
         tailwindcss(),
@@ -480,7 +479,6 @@ export default defineConfig({
             },
         }),
         {
-            // plugin-vue gives Vue TS the dev oxc config, React refresh included, so Vue modules would call $RefreshSig$.
             name: 'serveros:no-react-refresh-in-vue',
             apply: 'serve',
             configureServer(server) {
@@ -515,17 +513,14 @@ export default defineConfig({
               ]
             : []),
         {
-            // Self-contained: production runs the SSR bundle without node_modules.
             name: 'serveros:self-contained-ssr-bundle',
             apply: 'build',
             config: (_config, env) =>
                 env.isSsrBuild ? { ssr: { noExternal: true } } : undefined,
         },
     ]),
-    // One React: laravel-react-i18n asks for React 18 and package.json overrides it.
     resolve: {
         dedupe: ['react', 'react-dom'],
-        // Linked packages import vue and @/ from the panel, so keep their vendor path.
         ...(linkedPackages.length > 0 ? { preserveSymlinks: true } : {}),
     },
     optimizeDeps: {

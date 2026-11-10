@@ -66,4 +66,9 @@ class ProjectNode extends Model
     {
         return $this->kind === 'app';
     }
+
+    public function machineMoved(): bool
+    {
+        return $this->machine->workspace_id !== $this->project->workspace_id;
+    }
 }

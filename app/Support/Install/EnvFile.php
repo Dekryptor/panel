@@ -123,7 +123,6 @@ final class EnvFile
         $path = $this->path();
         $directory = dirname($path);
 
-        // Never over a file someone else owns: the replacement would be ours alone and unreadable to them.
         if (is_dir($directory) && is_writable($directory) && $this->ours($path)) {
             $temporary = @tempnam($directory, '.env.');
             if ($temporary !== false) {

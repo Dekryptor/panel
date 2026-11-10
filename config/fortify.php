@@ -44,6 +44,7 @@ return [
         Features::twoFactorAuthentication([
             'confirm' => true,
             'confirmPassword' => true,
+            'secret-length' => 32,
         ]),
         Features::passkeys([
             'confirmPassword' => true,

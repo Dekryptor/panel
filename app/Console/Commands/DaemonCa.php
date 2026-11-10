@@ -50,8 +50,7 @@ class DaemonCa extends Command
             if ($cert === false || ! openssl_pkey_export($key, $keyPem) || ! openssl_x509_export($cert, $certPem)) {
                 throw new RuntimeException('Could not generate the daemon CA.');
             }
-            file_put_contents($keyPath, $keyPem);
-            chmod($keyPath, 0600);
+            $this->writeSecret($keyPath, $keyPem);
             file_put_contents($certPath, $certPem);
             $this->info("Daemon CA created at {$certPath}. Keep {$keyPath} private and backed up.");
         } finally {
@@ -92,13 +91,31 @@ class DaemonCa extends Command
             if ($cert === false || ! openssl_pkey_export($key, $keyPem) || ! openssl_x509_export($cert, $certPem)) {
                 throw new RuntimeException('Could not issue the gateway certificate.');
             }
-            file_put_contents($out.'/gateway.key', $keyPem);
-            chmod($out.'/gateway.key', 0600);
+            $this->writeSecret($out.'/gateway.key', $keyPem);
             file_put_contents($out.'/gateway.crt', $certPem);
             file_put_contents($out.'/ca.crt', $caCert);
             $this->info("Gateway certificate written to {$out}.");
         } finally {
             @unlink($config);
+        }
+    }
+
+    private function writeSecret(string $path, string $contents): void
+    {
+        $umask = umask(0077);
+        try {
+            $file = is_link($path) ? false : @fopen($path, 'x');
+            if ($file === false) {
+                throw new RuntimeException("Could not create {$path}; refusing to write a key over anything already there.");
+            }
+            chmod($path, 0600);
+            $written = fwrite($file, $contents);
+            fclose($file);
+            if ($written !== strlen($contents)) {
+                throw new RuntimeException("Could not write {$path}.");
+            }
+        } finally {
+            umask($umask);
         }
     }
 

@@ -50,6 +50,11 @@ class Environments
         $nodes = $source->nodes()->with('machine')->get()->sortBy(fn (ProjectNode $node) => $node->isApp() ? 1 : 0);
         foreach ($nodes as $node) {
             $machine = $machines[$node->machine_id] ?? $node->machine;
+            if ($node->machine->workspace_id !== $project->workspace_id || $machine->workspace_id !== $project->workspace_id) {
+                $skipped[] = "{$node->name}: its machine moved to another workspace.";
+
+                continue;
+            }
             try {
                 if ($node->isApp()) {
                     [$copies[$node->id], $left] = $this->copyApp($environment, $node, $machine, $suffix, $user, $adjustApp);
@@ -172,6 +177,7 @@ class Environments
             $sourceSpec = (array) ($source?->command['job'] ?? []);
             $spec = (array) ($live?->command['job'] ?? []);
             $reason = match (true) {
+                $copy->machineMoved() || $target->machineMoved() => "{$target->name} is on a machine that moved to another workspace.",
                 $source === null => "{$copy->name} hasn’t deployed yet.",
                 $live === null => "{$target->name} hasn’t deployed yet.",
                 blank($sourceSpec['repo'] ?? null) => "{$copy->name} wasn’t deployed from code.",
@@ -353,6 +359,9 @@ class Environments
 
     private function removeFromMachine(ProjectNode $node, User $user): bool
     {
+        if ($node->machineMoved()) {
+            return true;
+        }
         $pending = DaemonJob::query()->where('machine_id', $node->machine_id)->where('kind', 'deploy')
             ->where('service', $node->name)->whereIn('state', ['queued', 'running'])->exists();
         $containers = array_values(array_filter(

@@ -25,7 +25,6 @@ class TickWorkflows extends Command
             ->limit(200)
             ->get()
             ->each(function (Workflow $workflow) use ($engine, &$started) {
-                // Moved on before starting, so a slow run can't start twice.
                 $workflow->forceFill(['next_run_at' => WorkflowSchedule::next($workflow->triggerRules())])->save();
                 if ($engine->start($workflow, 'schedule', 'On schedule') !== null) {
                     $started++;

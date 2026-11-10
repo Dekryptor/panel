@@ -67,7 +67,7 @@ This runs the code you check out, so it's the community edition: the paid featur
 
 You'll need PHP 8.4 (with the bcmath, ctype, curl, dom, fileinfo, intl, mbstring, openssl, pdo, tokenizer, xml and zip extensions, and pdo_pgsql for PostgreSQL), Composer, Node 22, a web server (nginx with PHP-FPM, or Caddy) and a database: PostgreSQL is best, MySQL, MariaDB and SQLite work too.
 
-1. Put the code in place and build it, as the web server's user:
+1. Put the code in place and build it, as root or a deploy user, not the web server's user:
 
     ```sh
     git clone https://github.com/serveroshq/panel.git /var/www/serveros && cd /var/www/serveros
@@ -84,6 +84,8 @@ You'll need PHP 8.4 (with the bcmath, ctype, curl, dom, fileinfo, intl, mbstring
     ```sh
     chown -R www-data:www-data storage bootstrap/cache .env
     ```
+
+    That's all PHP needs to write. Leave the rest of the code owned by root or the deploy user, so the web server can't change it. Run updates as that user too, as in [Upgrading](#upgrading): `bootstrap/cache` belongs to the web server's user now, so Composer skips its scripts and `php artisan package:discover` runs as `www-data`.
 
 3. Point the web server at `/var/www/serveros/public`, for `panel.example.com` and `*.panel.example.com`, with HTTPS. With Caddy:
 
@@ -135,7 +137,7 @@ The code is kept in `storage/app/private/install`, as a hash to check against an
 
 Installs set up before the web installer existed carry on as they are, and an install with accounts already counts as set up.
 
-Anyone who can open the panel can make an account and their own workspace, as on serveros.com. Invite your team from Settings › Members.
+The panel is invite only once its first account exists: invite your team from Settings › Members, and they sign up with the email the invite went to. To let anyone who can open the panel make an account and their own workspace, as on serveros.com, set `SERVEROS_SIGN_UPS=open` in `.env`.
 
 ## What runs
 
@@ -223,15 +225,17 @@ That backs up first, pulls the newest image, and restarts on it. The database mi
 
 Running the install command again brings it up to date too, keeping your settings, but without the backup first.
 
-On a plain server, back up first (below), then as the web server's user in the panel's folder:
+On a plain server, back up first (below), then in the panel's folder, the code as the user that owns it and `php artisan` as the web server's user:
 
 ```sh
 git pull
-composer install --no-dev --optimize-autoloader
+composer install --no-dev --optimize-autoloader --no-scripts
+sudo -u www-data rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
+sudo -u www-data php artisan package:discover
 npm ci && npm run build
-php artisan migrate --force
-php artisan optimize:clear
-php artisan queue:restart
+sudo -u www-data php artisan migrate --force
+sudo -u www-data php artisan optimize:clear
+sudo -u www-data php artisan queue:restart
 ```
 
 ## Every night
@@ -291,7 +295,7 @@ SERVEROS_DOMAIN=serveros.localhost
 ACME_EMAIL=you@example.com
 SERVEROS_IMAGE=ghcr.io/serveroshq/panel:latest   # or the image you built
 CADDY_GLOBAL_OPTIONS=local_certs
-GATEWAY_PANEL_CA=/data/caddy/pki/authorities/local/root.crt
+GATEWAY_PANEL_CA=/gateway/panel-ca.crt
 APP_KEY=base64:...      # head -c 32 /dev/urandom | base64
 DB_PASSWORD=...         # anything long
 DAEMON_GATEWAY_SECRET=... # anything 16 characters or longer
@@ -309,7 +313,7 @@ docker build -f docker/self-hosted/Dockerfile \
   -t serveros/panel:dev .
 ```
 
-Run it with `--image` and `--version` on the install script, or `SERVEROS_IMAGE` in `.env`. The gateway is built from the daemon's repository at the tag in `DAEMON_REF`.
+Run it with `--image` and `--version` on the install script, or `SERVEROS_IMAGE` in `.env`. The gateway is built from the daemon's repository at the tag in `DAEMON_REF`, and the build checks it's still the commit in `DAEMON_COMMIT`.
 
 The official image is built by ServerOS the same way, from a checkout that also requires the commercial `serveroshq/panel-ee` package, which is why it has the paid features and this one doesn't.
 

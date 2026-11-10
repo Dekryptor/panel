@@ -9,6 +9,7 @@ use App\Mcp\Schema;
 use App\Mcp\Scopes;
 use App\Mcp\Tool;
 use App\Mcp\ToolError;
+use App\Models\Workspace;
 use App\Support\Audit\AuditContext;
 
 final class ChangeMemberRole extends Tool
@@ -71,6 +72,12 @@ final class ChangeMemberRole extends Tool
         }
         if ($role->isStaffRole() && ! $workspace->hasStaffRoles()) {
             throw new ToolError('Member and Viewer roles are on Pro and Business.');
+        }
+        if (! $workspace->canGrant($context->user, $workspace->permissionsOf($member))) {
+            throw new ToolError("{$member->name} has access you don’t, so you can’t change their role.");
+        }
+        if (! $workspace->canGrant($context->user, Workspace::permissionsFor($role, $custom))) {
+            throw new ToolError('You can’t give a role with more access than your own. list_roles shows what each role can do.');
         }
 
         $customRoles = Team::customRoles($workspace);

@@ -21,6 +21,21 @@ final class ServiceClones
         };
     }
 
+    /** @param  array<string, mixed>  $service */
+    public static function controlsHost(array $service): bool
+    {
+        foreach (array_filter(explode(', ', (string) ($service['details']['mounts'] ?? ''))) as $mount) {
+            $source = explode(':', $mount, 2)[0];
+            $source = $source === '/' ? '/' : rtrim($source, '/');
+            if (preg_match('#(docker|containerd|podman)[^/]*\.sock$#', $source) === 1
+                || in_array($source, ['/', '/var', '/var/run', '/run', '/var/run/docker', '/run/docker', '/run/containerd'], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param  array<string, mixed>  $input
      * @return array<string, mixed>

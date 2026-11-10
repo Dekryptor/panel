@@ -677,3 +677,30 @@ test('workflows are found by name, and several with one name need the id', funct
 
     expect(mcpCall($workspace, $key, 'get_workflow', ['workflow' => ['x']])['data']['error'])->toContain('must be an id or a name');
 });
+
+test('get_workflow_run leaves a command step’s output out for people who don’t manage machines', function () {
+    [$workspace, $machine, $key] = wfToolsSetup();
+    $workflow = wfToolsFlow($workspace, [
+        ['t', 'trigger', ['event' => 'manual']],
+        ['c', 'command', ['machine_id' => (string) $machine->id, 'service' => 'docker:aaa', 'command' => 'printenv'], 't'],
+    ]);
+    $run = WorkflowRun::query()->create([
+        'workflow_id' => $workflow->id, 'state' => 'succeeded', 'trigger' => ['kind' => 'manual', 'summary' => 'By hand'], 'graph' => $workflow->graph,
+        'steps' => ['t' => ['state' => 'succeeded'], 'c' => ['state' => 'succeeded', 'message' => 'Command finished: DB_PASSWORD=hunter2']],
+        'frontier' => [], 'started_at' => now(), 'finished_at' => now(),
+        'logs' => [
+            ['t' => 1, 'node' => 'c', 'level' => 'info', 'message' => 'DB_PASSWORD=hunter2'],
+            ['t' => 2, 'node' => 'c', 'level' => 'success', 'message' => 'Run a command: Command finished: DB_PASSWORD=hunter2'],
+        ],
+    ]);
+
+    $hidden = mcpCall($workspace, wfToolsViewer($workspace), 'get_workflow_run', ['run' => $run->id]);
+    expect(json_encode($hidden['data']))->not->toContain('hunter2')
+        ->and(collect($hidden['data']['steps'])->firstWhere('id', 'c')['message'])->toBe('Command finished')
+        ->and($hidden['data']['logs'])->toHaveCount(1)
+        ->and($hidden['data']['logs'][0]['message'])->toBe('Run a command: Command finished');
+
+    $shown = mcpCall($workspace, $key, 'get_workflow_run', ['run' => $run->id]);
+    expect(collect($shown['data']['steps'])->firstWhere('id', 'c')['message'])->toBe('Command finished: DB_PASSWORD=hunter2')
+        ->and($shown['data']['logs'])->toHaveCount(2);
+});

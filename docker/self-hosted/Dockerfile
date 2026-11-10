@@ -23,10 +23,13 @@
 ARG PHP_IMAGE=dunglas/frankenphp:1-php8.4-bookworm
 
 # The gateway (serveros-gateway) from the daemon's public repository, at
-# the release tag the panel is tested with.
+# the release tag the panel is tested with, which must still be the commit
+# in DAEMON_COMMIT (a tag can be moved; bump both together).
 FROM rust:1-bookworm AS gateway
 ARG DAEMON_REF=v0.1.1-pre.36
-RUN git clone --depth 1 --branch "${DAEMON_REF}" https://github.com/serveroshq/daemon.git /src
+ARG DAEMON_COMMIT=18704df09a536fe1094be7f83f3e75a940eb0109
+RUN git clone --depth 1 --branch "${DAEMON_REF}" https://github.com/serveroshq/daemon.git /src \
+    && { [ -z "${DAEMON_COMMIT}" ] || [ "$(git -C /src rev-parse HEAD)" = "${DAEMON_COMMIT}" ]; }
 WORKDIR /src
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \

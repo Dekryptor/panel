@@ -23,8 +23,8 @@ final class PackageUpdates
 
     public const int CHECK_TIMEOUT = 300;
 
-    // No leading dash, so a name can't pass for an option.
-    public const string NAME_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9+._:~-]*$/';
+    // No leading dash (an option) or trailing one (apt reads "nginx-" as remove nginx).
+    public const string NAME_PATTERN = '/^[A-Za-z0-9](?:[A-Za-z0-9+._:~-]*[A-Za-z0-9+._:~])?$/';
 
     public const string VERSION_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9.+~:_-]*$/';
 

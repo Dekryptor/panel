@@ -66,6 +66,10 @@ class UpdateMemberRoleRequest extends FormRequest
                     $validator->errors()->add('role', 'You can’t change your own role.');
                 } elseif ($this->chosenRole()->isStaffRole() && ! $workspace->hasStaffRoles()) {
                     $validator->errors()->add('role', 'Member and Viewer roles are on Pro and Business.');
+                } elseif (! $workspace->canGrant($this->user(), $workspace->permissionsOf($member))) {
+                    $validator->errors()->add('role', 'They have access you don’t, so you can’t change their role.');
+                } elseif (! $workspace->canGrant($this->user(), Workspace::permissionsFor($this->chosenRole(), $this->chosenCustomRole()))) {
+                    $validator->errors()->add('role', 'You can’t give a role with more access than your own.');
                 }
             },
         ];

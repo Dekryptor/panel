@@ -80,6 +80,7 @@ const wantsCommands = computed(
 );
 const write = ref(wantsWrite.value && canChange.value);
 const commands = ref(false);
+const code = ref('');
 
 const busy = ref<'approve' | 'deny' | null>(null);
 
@@ -92,6 +93,10 @@ function decide(decision: 'approve' | 'deny'): void {
             workspace: workspaceId.value,
             write: write.value,
             commands: !audience.value && write.value && commands.value,
+            code:
+                !audience.value && write.value && commands.value
+                    ? code.value.trim()
+                    : null,
         },
         {
             onStart: () => (busy.value = decision),
@@ -287,6 +292,22 @@ function decide(decision: 'approve' | 'deny'): void {
                               )
                     }}</span>
                 </span>
+            </label>
+            <label
+                v-if="wantsCommands && !audience && write && commands"
+                class="flex flex-col gap-1.5 text-[13px]/5"
+            >
+                <span class="text-(--ds-text-muted)">{{
+                    $t('Enter the 6-digit code from your authenticator app')
+                }}</span>
+                <input
+                    v-model="code"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    maxlength="6"
+                    placeholder="000000"
+                    class="h-9 rounded-md border border-(--ds-border) bg-(--ds-field) px-3 font-ui-mono text-[13px]/5"
+                />
             </label>
             <InputError :message="errors?.commands" />
         </fieldset>

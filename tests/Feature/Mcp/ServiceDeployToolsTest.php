@@ -290,3 +290,24 @@ test('get_connection gives an app the database’s settings at the Docker bridge
     expect(mcpCall($workspace, $key, 'get_connection', ['machine' => 'web-1', 'service' => 'shop'])['text'])->toContain('isn’t a database or cache ServerOS deployed')
         ->and(mcpCall($workspace, mcpKey($workspace, scopes: [Scopes::READ]), 'get_connection', ['machine' => 'web-1', 'service' => 'postgres'])['error'])->toBeTrue();
 });
+
+test('templates that control Docker on the machine need a connection allowed to run commands', function () {
+    [$workspace] = serviceToolsSetup();
+    $writeOnly = mcpKey($workspace, scopes: [Scopes::READ, Scopes::WRITE]);
+
+    foreach (['portainer', 'coder', 'dozzle', 'kestra', 'onedev', 'woodpecker'] as $slug) {
+        expect(app(ServiceTemplateCatalog::class)->find($slug)->controlsHost())->toBeTrue();
+    }
+    expect(app(ServiceTemplateCatalog::class)->find('postgres')->controlsHost())->toBeFalse();
+
+    $refused = mcpCall($workspace, $writeOnly, 'deploy_template', ['machine' => 'web-1', 'template' => 'portainer', 'name' => 'portainer']);
+    expect($refused['error'])->toBeTrue()
+        ->and($refused['text'])->toContain('Run commands')
+        ->and(DaemonJob::query()->where('service', 'portainer')->exists())->toBeFalse();
+
+    expect(mcpCall($workspace, $writeOnly, 'deploy_template', ['machine' => 'web-1', 'template' => 'postgres', 'name' => 'db'])['error'])->toBeFalse();
+
+    $allowed = mcpCall($workspace, mcpKey($workspace), 'deploy_template', ['machine' => 'web-1', 'template' => 'portainer', 'name' => 'portainer']);
+    expect($allowed['error'])->toBeFalse($allowed['text'])
+        ->and(DaemonJob::query()->where('service', 'portainer')->exists())->toBeTrue();
+});

@@ -32,7 +32,7 @@ class RepositoryDetector
         $this->token = $workspace === null ? null : app(GitHubApp::class)->tokenFor($workspace, $owner, $name);
 
         $repo = $this->api("repos/{$owner}/{$name}");
-        if ($repo === null) {
+        if ($repo === null || ($this->token === null && ! self::isPublic($repo))) {
             throw ValidationException::withMessages(['repository' => self::notFound($workspace, $owner)]);
         }
 
@@ -343,6 +343,12 @@ class RepositoryDetector
             GitHubApp::connected($workspace, $owner) => "That repository doesn’t exist, or isn’t one {$owner} shared with ServerOS. Add it to the ServerOS app’s repositories on GitHub, then try again.",
             default => 'That repository doesn’t exist, or it’s private. To deploy private repositories, connect GitHub in Settings → General.',
         };
+    }
+
+    /** @param  array<string, mixed>  $repo */
+    public static function isPublic(array $repo): bool
+    {
+        return ($repo['private'] ?? false) === false && ($repo['visibility'] ?? 'public') === 'public';
     }
 
     private function client(): PendingRequest

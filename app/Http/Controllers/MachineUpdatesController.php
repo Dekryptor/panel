@@ -36,10 +36,9 @@ class MachineUpdatesController extends Controller
         $this->authorize($workspace, $machine);
         $data = $request->validate([
             'security_only' => ['required', 'boolean'],
-            // No leading dash, so a name can't pass for an option.
             'packages' => ['sometimes', 'array', 'min:1', 'max:500'],
-            'packages.*' => ['string', 'max:200', 'regex:/^[A-Za-z0-9][A-Za-z0-9+._:~-]*$/'],
-        ]);
+            'packages.*' => ['string', 'max:200', 'not_regex:/-$/', 'regex:'.PackageUpdates::NAME_PATTERN],
+        ], ['packages.*.not_regex' => 'A package name can’t end with a dash.']);
 
         if ($this->busy($machine)) {
             return response()->json(['error' => 'Updates are already being installed on this machine.'], 409);

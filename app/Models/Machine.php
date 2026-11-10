@@ -15,8 +15,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * A server connected to a workspace. Metrics hold the latest reported values.
- *
  * @property int $id
  * @property int $workspace_id
  * @property string $name
@@ -78,9 +76,6 @@ class Machine extends Model
     /** @use HasFactory<MachineFactory> */
     use HasFactory;
 
-    /**
-     * Refuse to connect machines beyond the workspace's plan.
-     */
     protected static function booted(): void
     {
         static::creating(function (Machine $machine) {
@@ -90,11 +85,7 @@ class Machine extends Model
         });
     }
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
+    /** @return array<string, string> */
     protected function casts(): array
     {
         return [
@@ -138,21 +129,13 @@ class Machine extends Model
         return $this->belongsTo(Workspace::class);
     }
 
-    /**
-     * The policy it picked itself, if any.
-     *
-     * @return BelongsTo<MachinePolicy, $this>
-     */
+    /** @return BelongsTo<MachinePolicy, $this> */
     public function policy(): BelongsTo
     {
         return $this->belongsTo(MachinePolicy::class, 'machine_policy_id');
     }
 
-    /**
-     * The OS updates its last check found.
-     *
-     * @return HasMany<MachinePackageUpdate, $this>
-     */
+    /** @return HasMany<MachinePackageUpdate, $this> */
     public function packageUpdates(): HasMany
     {
         return $this->hasMany(MachinePackageUpdate::class);
@@ -180,18 +163,11 @@ class Machine extends Model
         return $this->hasOne(StatusPage::class);
     }
 
-    /**
-     * Whether someone has said it's under planned work right now: alerts
-     * and event workflows about it hold off until the window ends.
-     */
     public function inMaintenance(): bool
     {
         return $this->maintenance_until !== null && $this->maintenance_until->isFuture();
     }
 
-    /**
-     * Whether the daemon has reported in the last minute.
-     */
     public function isOnline(): bool
     {
         return $this->uid !== null
@@ -221,44 +197,27 @@ class Machine extends Model
         return $this->icon_path === null ? null : Storage::disk('public')->url($this->icon_path);
     }
 
-    /**
-     * Whether a deploy of this app snapshots its data first. On unless
-     * someone turned it off for the app.
-     */
     public function snapshotsBeforeDeploy(string $app): bool
     {
         return (bool) ($this->app_settings[$app]['snapshot_before'] ?? true);
     }
 
-    /**
-     * Services ServerOS can back up: the ones it manages (deployed here or
-     * adopted), from the latest scan.
-     *
-     * @return list<array<string, mixed>>
-     */
+    /** @return list<array<string, mixed>> */
     public function backupableServices(): array
     {
         return array_values(array_filter(
             $this->inventory['services'] ?? [],
-            // The daemon says when there's nothing to copy (Docker itself, a
-            // proxy); daemons from before it said so leave it out.
+
             fn ($service) => is_array($service) && isset($service['key']) && ($service['details']['managed'] ?? null) === 'true'
                 && ($service['details']['backup'] ?? null) !== 'none',
         ));
     }
 
-    /**
-     * Where a port on this machine opens from the panel's own computer, for
-     * a local test node (a container enrolled from 127.0.0.1) whose Caddy
-     * proxies http://<port>.localhost; see docker/daemon-local/local-proxy.sh.
-     * Null for real machines.
-     */
     public function localAddress(int $port): ?string
     {
         if (! in_array($this->ip_address, ['127.0.0.1', '::1'], true)) {
             return null;
         }
-        // Each local test node has its own proxy port on this Mac.
         $proxyPort = config('daemon.local_node_port');
         foreach (array_filter(explode(',', (string) config('daemon.local_node_ports'))) as $pair) {
             [$host, $nodePort] = array_pad(explode('=', trim($pair), 2), 2, null);
@@ -273,12 +232,6 @@ class Machine extends Model
         return "http://{$port}.localhost:{$proxyPort}";
     }
 
-    /**
-     * Whether Docker is on the machine, which every deploy needs: true or
-     * false once the daemon has reported, null before its first scan. The
-     * daemon doesn't always send a version, so a Docker service or any
-     * container counts too.
-     */
     public function hasDocker(): ?bool
     {
         if (($this->facts['docker_version'] ?? null) !== null) {

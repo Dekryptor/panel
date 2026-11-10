@@ -35,11 +35,6 @@ use App\Mcp\Tools\Machine\UpdateMachine;
 use App\Mcp\Tools\Machine\UpdateMachineGroup;
 use App\Mcp\Tools\Machine\UpdateMachinePolicy;
 
-/**
- * Machines: seeing them, organising them into groups, maintenance
- * windows, operating system updates and reboots, the firewall, rescans,
- * and connecting and removing servers.
- */
 final class MachineTools implements ToolGroup
 {
     public static function tools(): array

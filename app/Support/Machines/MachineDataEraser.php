@@ -245,7 +245,6 @@ final class MachineDataEraser
             $keys = array_filter(array_map(fn (array $service) => $service['key'] ?? null, $kept), 'is_string');
 
             $machine->forceFill([
-                // Never null: that means "not scanned yet" and would rerun a new server's setup checks.
                 'inventory' => ['scanned_at' => null, 'complete' => false, 'services' => $kept, 'listeners' => []],
                 'inventory_scanned_at' => null,
                 'service_stats' => array_intersect_key($machine->service_stats ?? [], array_flip($keys)) ?: null,

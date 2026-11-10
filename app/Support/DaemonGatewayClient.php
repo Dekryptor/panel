@@ -44,9 +44,7 @@ class DaemonGatewayClient
         try {
             $client = Http::timeout(5)->acceptJson()->withHeaders(['X-Gateway-Secret' => $secret]);
             $url = rtrim($base, '/').'/machines/'.$machine->uid;
-            // Reconfigure first, on the same ordered queue: older connections may still be read-only.
             $mode = $client->post($url.'/control', [
-                // Only the mode: null would clear a pinned version.
                 'control' => ['type' => 'reconfigure', 'mode' => 'managed'],
             ]);
             if (! $mode->successful()) {

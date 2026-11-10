@@ -7,7 +7,6 @@ export type Consent = {
     marketing: boolean;
 };
 
-// Bump when the categories change, so everyone is asked again.
 export const CONSENT_VERSION = 2;
 
 export const CONSENT_EVENT = 'serveros:consent';

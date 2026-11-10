@@ -11,7 +11,6 @@ use Laravel\Fortify\Contracts\TwoFactorLoginResponse as TwoFactorLoginResponseCo
 use Laravel\Fortify\Fortify;
 use Symfony\Component\HttpFoundation\Response;
 
-// Inertia can't follow a cross-origin redirect over XHR: it needs a full page visit.
 class LoginResponse implements LoginResponseContract, RegisterResponseContract, TwoFactorLoginResponseContract
 {
     /**

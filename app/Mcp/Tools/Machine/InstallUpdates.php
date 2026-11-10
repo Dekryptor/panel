@@ -8,6 +8,7 @@ use App\Mcp\Schema;
 use App\Mcp\Scopes;
 use App\Mcp\Tool;
 use App\Mcp\ToolError;
+use App\Support\Machines\PackageUpdates;
 
 final class InstallUpdates extends Tool
 {
@@ -58,11 +59,13 @@ final class InstallUpdates extends Tool
             'machine' => ['required', ServerWork::reference()],
             'confirm' => ['nullable', 'string', 'max:200'],
             'security_only' => ['sometimes', 'boolean'],
-            // No leading dash, so a name can't pass for an option.
             'packages' => ['sometimes', 'array', 'list', 'min:1', 'max:500'],
-            'packages.*' => ['string', 'max:200', 'regex:/^[A-Za-z0-9][A-Za-z0-9+._:~-]*$/'],
+            'packages.*' => ['string', 'max:200', 'not_regex:/-$/', 'regex:'.PackageUpdates::NAME_PATTERN],
             'wait' => ServerWork::waitRules(),
-        ], ['packages.*.regex' => 'Package names are letters, digits and + . _ : ~ -, and can’t start with a dash.']);
+        ], [
+            'packages.*.regex' => 'Package names are letters, digits and + . _ : ~ -, and can’t start with a dash.',
+            'packages.*.not_regex' => 'A package name can’t end with a dash.',
+        ]);
         $machine = $context->machine($data['machine']);
         ServerWork::confirm($data, $machine->name, 'machine', 'Package upgrades can restart the services they belong to.');
         ServerWork::throttle($context, 'install-updates', 5);

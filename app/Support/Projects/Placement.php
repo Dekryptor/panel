@@ -67,7 +67,6 @@ final class Placement
         return ['services' => $services, 'ports' => $ports];
     }
 
-    // Matched exactly: a prefix would pick up shop-db's or shop-staging's containers.
     /** @return list<array<string, mixed>> */
     public static function containers(Machine $machine, string $name): array
     {

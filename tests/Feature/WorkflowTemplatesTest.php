@@ -3,6 +3,7 @@
 use App\Enums\Plan;
 use App\Models\DaemonJob;
 use App\Models\Machine;
+use App\Models\User;
 use App\Models\Workflow;
 use App\Models\Workspace;
 use App\Notifications\MonitorAlert;
@@ -145,6 +146,34 @@ test('an alert just to specific people leaves the team out, and checks the addre
         ->and($bad('not-an-email'))->toStartWith('Up to 5 email addresses')
         ->and($bad('a@x.com,b@x.com,c@x.com,d@x.com,e@x.com,f@x.com'))->toStartWith('Up to 5')
         ->and($bad('a@x.com; b@x.com'))->toBeNull();
+});
+
+test('alerts can only email so many people outside the workspace a day', function () {
+    config()->set('serveros.workflow_outside_emails_per_day', 3);
+    [$workspace] = tplWorkspace();
+    $member = User::factory()->create(['email' => 'teammate@example.com']);
+    $workspace->members()->attach($member, ['role' => 'viewer']);
+    $workflow = tplFlow($workspace, [
+        ['t', 'trigger', ['event' => 'manual']],
+        ['a', 'alert', ['to' => 'emails', 'emails' => 'teammate@example.com, a@example.com, b@example.com', 'subject' => 'Verify your payout'], 't'],
+    ]);
+
+    $first = app(WorkflowEngine::class)->start($workflow, 'manual', 'Test', [], $workspace->owner);
+    $second = app(WorkflowEngine::class)->start($workflow, 'manual', 'Test', [], $workspace->owner);
+
+    expect($first->state)->toBe('succeeded')
+        ->and($second->state)->toBe('failed')
+        ->and($second->steps['a']['message'])->toContain('up to 3 people outside the workspace a day');
+    Notification::assertSentOnDemandTimes(WorkflowMessage::class, 1);
+
+    config()->set('serveros.edition', 'self-hosted');
+    expect(app(WorkflowEngine::class)->start($workflow, 'manual', 'Test', [], $workspace->owner)->state)->toBe('succeeded');
+});
+
+test('alert emails say which workspace sent them', function () {
+    $mail = (new WorkflowMessage('Verify your payout', 'Click [here](https://evil.test)', 'Stripe Billing', 'o@example.com', true, 'https://serveros.test/'))->toMail(new AnonymousNotifiable);
+
+    expect(implode("\n", $mail->introLines))->toContain('Sent by the workspace “Stripe Billing” with a [ServerOS](https://serveros.test/) workflow. ServerOS didn’t write this message.');
 });
 
 test('backing up every server skips the ones that are offline', function () {

@@ -61,7 +61,6 @@ export function uptime(startedAt: number | null | undefined): string {
     return `${seconds}s`;
 }
 
-// Cgroups report no limit as a huge number.
 export function memLimit(stat: ServiceStat | null): number | null {
     return stat?.memLimit && stat.memLimit < 2 ** 50 ? stat.memLimit : null;
 }

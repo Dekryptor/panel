@@ -8,6 +8,7 @@ use App\Models\McpToken;
 use App\Models\User;
 use App\Models\Workspace;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
 
 beforeEach(fn () => config()->set('mcp.groups', [WorkspaceTools::class]));
 
@@ -42,6 +43,41 @@ test('keys need the experimental terms accepted first, and are shown once', func
             ->missing('connections.0.secret'));
 });
 
+test('an MCP key that runs commands needs a fresh two-factor code, like the console', function () {
+    $workspace = Workspace::factory()->create();
+    $owner = $workspace->owner;
+    $owner->forceFill(['mcp_terms_accepted_at' => now(), 'two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $provider = Mockery::mock(TwoFactorAuthenticationProvider::class);
+    $provider->shouldReceive('verify')->andReturnUsing(fn ($secret, $code) => $code === '123456');
+    app()->instance(TwoFactorAuthenticationProvider::class, $provider);
+
+    $this->actingAs($owner)->postJson(mcpSettings($workspace, '/keys'), ['name' => 'Shell', 'access' => 'commands'])
+        ->assertUnprocessable()->assertJsonValidationErrors('code')->assertJson(['code' => 'console_locked']);
+    $this->actingAs($owner)->postJson(mcpSettings($workspace, '/keys'), ['name' => 'Shell', 'access' => 'commands', 'code' => '000000'])
+        ->assertUnprocessable()->assertJsonValidationErrors('code');
+    expect(McpToken::query()->count())->toBe(0);
+
+    $this->actingAs($owner)->postJson(mcpSettings($workspace, '/keys'), ['name' => 'Shell', 'access' => 'commands', 'code' => '123456'])
+        ->assertCreated()->assertJsonPath('scopes', Scopes::ALL);
+    $this->actingAs($owner)->get(mcpSettings($workspace))->assertInertia(fn (Assert $page) => $page->where('consoleUnlocked', true));
+});
+
+test('a wrong code for a command key can’t be tried over and over', function () {
+    $workspace = Workspace::factory()->create();
+    $owner = $workspace->owner;
+    $owner->forceFill(['mcp_terms_accepted_at' => now(), 'two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $provider = Mockery::mock(TwoFactorAuthenticationProvider::class);
+    $provider->shouldReceive('verify')->andReturnUsing(fn ($secret, $code) => $code === '123456');
+    app()->instance(TwoFactorAuthenticationProvider::class, $provider);
+
+    foreach (range(1, 5) as $try) {
+        $this->actingAs($owner)->postJson(mcpSettings($workspace, '/keys'), ['name' => 'Shell', 'access' => 'commands', 'code' => '000000'])->assertUnprocessable();
+    }
+    $this->actingAs($owner)->postJson(mcpSettings($workspace, '/keys'), ['name' => 'Shell', 'access' => 'commands', 'code' => '123456'])
+        ->assertUnprocessable()->assertJsonPath('errors.code.0', 'Too many tries. Wait a minute, then use a fresh code.');
+    expect(McpToken::query()->count())->toBe(0);
+});
+
 test('people see their own connections; those who manage members see and revoke everyone’s', function () {
     $workspace = Workspace::factory()->create();
     $member = User::factory()->create(['mcp_terms_accepted_at' => now()]);
@@ -64,4 +100,45 @@ test('another workspace’s connection can’t be touched from here', function (
 
     $this->actingAs($workspace->owner)->delete(mcpSettings($workspace, "/connections/{$key->id}"))->assertNotFound();
     expect($key->fresh()->revoked_at)->toBeNull();
+});
+
+test('a key that can run commands needs a fresh two-factor code, for MCP and the API alike', function () {
+    $workspace = Workspace::factory()->create();
+    $owner = $workspace->owner;
+    $owner->forceFill(['mcp_terms_accepted_at' => now(), 'two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $provider = Mockery::mock(TwoFactorAuthenticationProvider::class);
+    $provider->shouldReceive('verify')->andReturnUsing(fn ($secret, $code) => $code === '123456');
+    app()->instance(TwoFactorAuthenticationProvider::class, $provider);
+
+    foreach (['/settings/mcp/keys', '/settings/api/keys'] as $path) {
+        $url = 'https://'.$workspace->host().$path;
+        $this->actingAs($owner)->postJson($url, ['name' => 'Shell', 'access' => 'commands'])->assertStatus(422)->assertJsonValidationErrors('code');
+        $this->actingAs($owner)->postJson($url, ['name' => 'Shell', 'access' => 'commands', 'code' => '000000'])->assertStatus(422)->assertJsonValidationErrors('code');
+        $this->actingAs($owner)->postJson($url, ['name' => 'Laptop', 'access' => 'write'])->assertCreated();
+    }
+    expect(McpToken::query()->get()->every(fn (McpToken $t) => ! $t->allows(Scopes::COMMANDS)))->toBeTrue();
+
+    $this->actingAs($owner)->postJson(mcpSettings($workspace, '/keys'), ['name' => 'Shell', 'access' => 'commands', 'code' => '123456'])
+        ->assertCreated()->assertJsonPath('scopes', Scopes::ALL);
+});
+
+test('wrong two-factor codes share one limit across the console and the key forms', function () {
+    $workspace = Workspace::factory()->create();
+    $owner = $workspace->owner;
+    $owner->forceFill(['mcp_terms_accepted_at' => now(), 'two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $provider = Mockery::mock(TwoFactorAuthenticationProvider::class);
+    $provider->shouldReceive('verify')->andReturnUsing(fn ($secret, $code) => $code === '123456');
+    app()->instance(TwoFactorAuthenticationProvider::class, $provider);
+    $host = 'https://'.$workspace->host();
+
+    foreach (['/settings/mcp/keys', '/settings/api/keys', '/settings/mcp/keys', '/settings/api/keys', '/settings/mcp/keys'] as $path) {
+        $this->actingAs($owner)->postJson($host.$path, ['name' => 'Shell', 'access' => 'commands', 'code' => '000000'])->assertJsonValidationErrors('code');
+    }
+
+    $this->actingAs($owner)->postJson($host.'/settings/api/keys', ['name' => 'Shell', 'access' => 'commands', 'code' => '123456'])->assertJsonValidationErrors('code');
+    $this->actingAs($owner)->postJson($host.'/console/unlock', ['code' => '123456'])->assertJsonValidationErrors('code');
+    expect(McpToken::query()->exists())->toBeFalse();
+
+    $this->travel(61)->seconds();
+    $this->actingAs($owner)->postJson($host.'/settings/api/keys', ['name' => 'Shell', 'access' => 'commands', 'code' => '123456'])->assertCreated();
 });

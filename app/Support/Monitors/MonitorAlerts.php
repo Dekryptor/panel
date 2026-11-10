@@ -14,10 +14,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
 
-/**
- * Tells people about a monitor: an email to the workspace's owners and
- * admins, and a post to its webhook (Slack and Discord both read it).
- */
 class MonitorAlerts
 {
     public function __construct(private readonly HostResolver $resolver) {}
@@ -52,10 +48,6 @@ class MonitorAlerts
         ], bad: true);
     }
 
-    /**
-     * Send a test to the webhook. Null on success, otherwise what went
-     * wrong.
-     */
     public function test(Workspace $workspace, string $url): ?string
     {
         return $this->post($url, [
@@ -86,16 +78,11 @@ class MonitorAlerts
     }
 
     /**
-     * Email the owners and admins and post to the webhook, as the workspace
-     * has them set. Failures are logged, never thrown: an alert that can't
-     * go out mustn't stop the check that raised it.
-     *
      * @param  list<string>  $lines
      * @param  array<string, mixed>  $extra  more fields for the webhook body
      */
     public function notify(Workspace $workspace, string $event, string $subject, array $lines, string $url, bool $bad, string $actionLabel, array $extra = []): void
     {
-        // Switched off for this workspace: still on the page, just not sent.
         if (! AlertKinds::allows($workspace, $event)) {
             return;
         }
@@ -126,12 +113,7 @@ class MonitorAlerts
         }
     }
 
-    /**
-     * Owners and admins, each as they've chosen: every alert, only
-     * problems (not "it's back"), or none.
-     *
-     * @return Collection<int, User>
-     */
+    /** @return Collection<int, User> */
     private function recipients(Workspace $workspace, bool $bad = true): Collection
     {
         return $workspace->members()

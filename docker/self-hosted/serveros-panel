@@ -127,6 +127,9 @@ upgrade() {
     docker run --rm --entrypoint cat "$(image)" /app/docker/self-hosted/compose.yaml > compose.yaml.new && mv compose.yaml.new compose.yaml
     docker run --rm --entrypoint cat "$(image)" /app/docker/self-hosted/serveros-panel > /usr/local/bin/serveros-panel.new \
         && chmod +x /usr/local/bin/serveros-panel.new && mv /usr/local/bin/serveros-panel.new /usr/local/bin/serveros-panel
+    if grep -q requirepass compose.yaml && ! grep -q '^REDIS_PASSWORD=.' .env; then
+        set_env REDIS_PASSWORD "$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    fi
     # Migrations run as the web container starts.
     compose up -d --remove-orphans
     wait_healthy

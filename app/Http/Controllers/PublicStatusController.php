@@ -54,6 +54,7 @@ class PublicStatusController extends Controller
         $page = StatusPage::query()->where('slug', $slug)->with(['machine.workspace', 'machine.serviceGroups'])->first()
             ?? WorkspaceStatusPage::query()->where('slug', $slug)->with('workspace')->first();
         abort_if($page === null || ! $page->live() || ! $page->public, 404);
+        self::abortUnlessServedHere($request, $page);
 
         $view = $request->query('view') === 'bar' ? 'bar' : 'card';
         $theme = in_array($request->query('theme'), ['dark', 'auto'], true) ? $request->query('theme') : 'light';
@@ -71,11 +72,12 @@ class PublicStatusController extends Controller
         return $response;
     }
 
-    public function og(string $slug): HttpResponse
+    public function og(Request $request, string $slug): HttpResponse
     {
         $page = StatusPage::query()->where('slug', $slug)->with(['machine.workspace', 'machine.serviceGroups'])->first()
             ?? WorkspaceStatusPage::query()->where('slug', $slug)->with('workspace')->first();
         abort_if($page === null || ! $page->live() || ! $page->public, 404);
+        self::abortUnlessServedHere($request, $page);
 
         $report = self::report($page);
         $address = preg_replace('#^https?://#', '', self::link($page));
@@ -139,6 +141,7 @@ class PublicStatusController extends Controller
         $page = StatusPage::query()->where('slug', $slug)->with('machine.workspace')->first()
             ?? WorkspaceStatusPage::query()->where('slug', $slug)->with('workspace')->first();
         abort_if($page === null || ! $page->live() || ! $page->public, 404);
+        self::abortUnlessServedHere($request, $page);
 
         $overall = self::report($page)['overall'];
         [$label, $color] = match ($overall['status']) {
@@ -159,6 +162,7 @@ class PublicStatusController extends Controller
         $page = StatusPage::query()->where('slug', $slug)->with(['machine.workspace', 'machine.serviceGroups'])->first()
             ?? WorkspaceStatusPage::query()->where('slug', $slug)->with('workspace')->first();
         abort_if($page === null || ! $page->live(), 404);
+        self::abortUnlessServedHere($request, $page);
 
         if (! $page->public) {
             $user = $request->user();
@@ -226,6 +230,12 @@ class PublicStatusController extends Controller
         $components = (string) json_encode(StatusOgImage::components($report));
 
         return substr(md5(implode('|', [$report['title'], $report['overall']['label'], $report['uptimePercent'], $components])), 0, 10);
+    }
+
+    public static function abortUnlessServedHere(Request $request, StatusPage|WorkspaceStatusPage $page): void
+    {
+        $workspace = $request->attributes->get('custom_workspace');
+        abort_if(is_int($workspace) && $workspace !== 0 && self::workspaceOf($page)->id !== $workspace, 404);
     }
 
     private static function workspaceOf(StatusPage|WorkspaceStatusPage $page): Workspace

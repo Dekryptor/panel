@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Backups\BackupRunner;
 use App\Support\Backups\S3Probe;
+use App\Support\Monitors\HostResolver;
 use Illuminate\Http\Client\Request as GatewayRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -24,6 +25,13 @@ function backupWorkspace(?object $storage = null): array
         '127.0.0.1:8090/*' => Http::response(['queued' => true], 202),
         '*' => $storage ?? Http::response('', 200),
     ]);
+    app()->instance(HostResolver::class, new class extends HostResolver
+    {
+        protected function addresses(string $host): array
+        {
+            return [str_contains($host, 'internal') ? '10.0.0.5' : '52.95.150.10'];
+        }
+    });
 
     $workspace = Workspace::factory()->create();
     $machine = onlineMachine($workspace, 'game-box', [
@@ -97,6 +105,45 @@ test('an S3 bucket is checked with a test upload, and its keys are kept encrypte
     Http::assertSent(fn (GatewayRequest $r) => $r->method() === 'PUT'
         && $r->url() === 'https://my-worlds.s3.eu-west-2.amazonaws.com/serveros/.serveros-check'
         && str_starts_with($r->header('Authorization')[0], 'AWS4-HMAC-SHA256 Credential=AKIA1/'));
+});
+
+test('an S3 endpoint that points into a private network is refused before anything is sent, except on self-hosted', function () {
+    [$workspace, , $base] = backupWorkspace();
+    $add = fn () => $this->actingAs($workspace->owner)->post($base.'/backup-destinations', [
+        'type' => 's3', 'name' => 'LAN', 'endpoint' => 'minio.internal.example:9000', 'region' => 'us-east-1',
+        'bucket' => 'worlds', 'access_key' => 'AKIA1', 'secret_key' => 'shh', 'path_style' => true,
+    ]);
+
+    $add()->assertSessionHasErrors(['probe' => "Couldn't reach minio.internal.example:9000, or it points into a private network."]);
+    Http::assertNotSent(fn (GatewayRequest $r) => $r->method() === 'PUT');
+
+    config()->set('serveros.edition', 'self-hosted');
+    $add()->assertSessionHasNoErrors();
+    Http::assertSent(fn (GatewayRequest $r) => $r->method() === 'PUT' && $r->url() === 'https://minio.internal.example:9000/worlds/.serveros-check');
+    expect(BackupDestination::query()->count())->toBe(1);
+});
+
+test('the S3 check connects to the address it vetted and does not follow redirects', function () {
+    [$workspace, , $base] = backupWorkspace(Http::response('', 302, ['Location' => 'http://169.254.169.254/latest/meta-data/']));
+    $options = null;
+    Http::globalMiddleware(function (callable $handler) use (&$options) {
+        return function ($request, array $o) use ($handler, &$options) {
+            if ($request->getMethod() === 'PUT') {
+                $options = $o;
+            }
+
+            return $handler($request, $o);
+        };
+    });
+
+    $this->actingAs($workspace->owner)->post($base.'/backup-destinations', [
+        'type' => 's3', 'name' => 'Worlds', 'endpoint' => 's3.eu-west-2.amazonaws.com', 'region' => 'eu-west-2',
+        'bucket' => 'my-worlds', 'access_key' => 'AKIA1', 'secret_key' => 'shh',
+    ])->assertSessionHasErrors(['probe' => 'The storage answered HTTP 302.']);
+
+    expect($options['allow_redirects'] ?? null)->toBeFalse()
+        ->and($options['curl'][CURLOPT_RESOLVE] ?? null)->toBe(['my-worlds.s3.eu-west-2.amazonaws.com:443:52.95.150.10']);
+    expect(BackupDestination::query()->count())->toBe(0);
 });
 
 test('a bucket that turns the keys down is not added, and says why', function () {
@@ -296,7 +343,7 @@ test('removing a destination turns off the schedules that used it', function () 
 });
 
 test('S3 requests are signed the AWS way', function () {
-    $headers = (new S3Probe)->sign(
+    $headers = app(S3Probe::class)->sign(
         ['region' => 'us-east-1', 'access_key' => 'AKIAIOSFODNN7EXAMPLE', 'secret_key' => 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'],
         'examplebucket.s3.amazonaws.com',
         '/test%24file.text',

@@ -26,6 +26,7 @@ const props = defineProps<{
     oauthProviders: string[];
     turnstileSiteKey: string | null;
     selfHosted?: boolean;
+    inviteOnly?: boolean;
 }>();
 
 defineOptions({
@@ -38,7 +39,11 @@ defineOptions({
 if (props.selfHosted) {
     setLayoutProps({
         title: trans('Create your account'),
-        description: trans('Your own ServerOS panel. No card, no trial.'),
+        description: props.inviteOnly
+            ? trans(
+                  'This panel is invite only. Use the email your invite went to.',
+              )
+            : trans('Your own ServerOS panel. No card, no trial.'),
     });
 }
 

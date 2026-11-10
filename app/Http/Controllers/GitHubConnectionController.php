@@ -54,19 +54,18 @@ class GitHubConnectionController extends Controller
 
         $installationId = (int) $request->query('installation_id');
         $code = (string) $request->query('code');
-        $details = $installationId > 0 && $code !== '' && $this->github->userCanSee($code, $installationId)
-            ? $this->github->installation($installationId)
-            : null;
-        $login = is_array($details) ? ($details['account']['login'] ?? null) : null;
-        if (! is_string($login)) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => 'GitHub didn’t confirm that installation. Try connecting again.']);
+        $installer = $installationId > 0 && $code !== '' ? $this->github->confirmInstaller($code, $installationId) : null;
+        if ($installer === null) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => 'GitHub didn’t confirm you manage that installation. An owner of the GitHub account, or an admin of every repository it shares, needs to connect it.']);
 
             return redirect()->away($back);
         }
+        $login = $installer['login'];
 
         $workspace->githubInstallations()->updateOrCreate(['installation_id' => $installationId], [
             'account_login' => $login,
-            'account_type' => is_string($details['account']['type'] ?? null) ? $details['account']['type'] : null,
+            'account_type' => $installer['type'],
+            'repository_ids' => $installer['repository_ids'],
             'connected_by' => $request->user()->id,
         ]);
         Activity::record($workspace, 'github.connected', $login);

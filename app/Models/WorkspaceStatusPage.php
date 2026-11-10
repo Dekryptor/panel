@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasStatusBranding;
+use App\Support\Domains\CustomDomains;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -36,6 +37,15 @@ class WorkspaceStatusPage extends Model
     use HasStatusBranding;
 
     protected $guarded = ['id', 'workspace_id'];
+
+    protected static function booted(): void
+    {
+        static::updated(function (WorkspaceStatusPage $page) {
+            if ($page->wasChanged('slug')) {
+                CustomDomains::forget();
+            }
+        });
+    }
 
     protected function casts(): array
     {

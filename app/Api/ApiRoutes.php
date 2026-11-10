@@ -2,18 +2,8 @@
 
 namespace App\Api;
 
-/**
- * The REST API's routes, each one a tool the MCP server has: the same
- * checks, the same answers, so the API, MCP and the dashboard can't drift
- * apart. Path parameters become the tool's arguments of the same name; a
- * GET's query string or any other method's JSON body supplies the rest.
- *
- * Order matters where a fixed segment and a parameter share a place
- * (workflows/reference before workflows/{workflow}).
- */
 final class ApiRoutes
 {
-    /** What each group of routes is about, for the OpenAPI tags. */
     public const TAGS = [
         'Workspace' => 'The workspace itself, search, issues, activity and your own notification settings.',
         'Machines' => 'Servers running the ServerOS daemon: details, maintenance, updates, reboots and the firewall.',
@@ -46,11 +36,7 @@ final class ApiRoutes
         return $routes;
     }
 
-    /**
-     * Tag => [method, path, tool].
-     *
-     * @return array<string, list<array{0: string, 1: string, 2: string}>>
-     */
+    /** @return array<string, list<array{0: string, 1: string, 2: string}>> */
     private static function table(): array
     {
         return [
@@ -224,11 +210,7 @@ final class ApiRoutes
         ];
     }
 
-    /**
-     * The path's parameter names, in order.
-     *
-     * @return list<string>
-     */
+    /** @return list<string> */
     public static function parameters(string $path): array
     {
         preg_match_all('/\{([a-z_]+)\}/', $path, $matches);

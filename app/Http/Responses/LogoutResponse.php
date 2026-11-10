@@ -8,7 +8,6 @@ use Inertia\Inertia;
 use Laravel\Fortify\Contracts\LogoutResponse as LogoutResponseContract;
 use Symfony\Component\HttpFoundation\Response;
 
-// Inertia can't follow a cross-origin redirect over XHR: it needs a full page visit.
 class LogoutResponse implements LogoutResponseContract
 {
     public const string REDIRECT = 'sign_out.redirect';

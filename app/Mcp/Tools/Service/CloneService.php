@@ -66,6 +66,11 @@ final class CloneService extends Tool
         if (($reason = ServiceClones::unavailable($machine, $service)) !== null) {
             throw new ToolError($reason);
         }
+        if (ServiceClones::controlsHost($service) && ! $context->allows(Scopes::COMMANDS)) {
+            throw new ToolError($context->via === 'assistant'
+                ? "{$service['display']} can reach Docker on the machine, which is root access, and Ask AI never copies that. Tell the person to clone it from the dashboard."
+                : "{$service['display']} can reach Docker on the machine, which is root access, so copying it needs a connection allowed to run commands. Reconnect and allow “Run commands” (it needs two-factor authentication), or clone it from the dashboard.");
+        }
         if (! isset($arguments['port']) && blank($arguments['domain'] ?? null)) {
             throw new ToolError('Say where to reach the copy: a port, or a domain.');
         }

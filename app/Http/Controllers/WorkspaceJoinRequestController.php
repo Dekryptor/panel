@@ -27,6 +27,9 @@ class WorkspaceJoinRequestController extends Controller
         if (is_string($choice)) {
             throw ValidationException::withMessages(['role' => $choice]);
         }
+        if (! $workspace->canGrant($request->user(), $choice->permissions())) {
+            throw ValidationException::withMessages(['role' => 'You can’t give a role with more access than your own.']);
+        }
 
         $user = $joinRequest->user;
         DB::transaction(function () use ($workspace, $joinRequest, $user, $choice, $request): void {

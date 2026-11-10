@@ -48,7 +48,7 @@ class GitHubWebhookController extends Controller
             'pushed_at' => self::pushedAt($request->input('repository.pushed_at')),
         ];
 
-        $workspaces = GitHubInstallation::query()->where('installation_id', $installation)->pluck('workspace_id');
+        $workspaces = self::workspaces($installation, (int) $request->input('repository.id'));
         $workflows = Workflow::query()
             ->with('workspace')
             ->whereIn('workspace_id', $workspaces)
@@ -81,6 +81,17 @@ class GitHubWebhookController extends Controller
         }
 
         return response()->json(['started' => $started, 'skipped' => $skipped], 202);
+    }
+
+    /** @return list<int> */
+    private static function workspaces(int $installation, int $repository): array
+    {
+        return array_values(GitHubInstallation::query()
+            ->where('installation_id', $installation)
+            ->get()
+            ->filter(fn (GitHubInstallation $link) => $link->allows($repository))
+            ->map(fn (GitHubInstallation $link) => $link->workspace_id)
+            ->all());
     }
 
     /** @param  array{repo: string, branch: string, commit: string, pushed_at: int|null}  $push */
@@ -139,7 +150,7 @@ class GitHubWebhookController extends Controller
             return response()->json(['ignored' => 'fork']);
         }
 
-        $workspaces = GitHubInstallation::query()->where('installation_id', $installation)->pluck('workspace_id');
+        $workspaces = self::workspaces($installation, (int) $request->input('repository.id'));
         $projects = Project::query()
             ->with('workspace')
             ->whereIn('workspace_id', $workspaces)

@@ -32,7 +32,6 @@ class AssistantAgent
 {
     private const TTL_HOURS = 6;
 
-    // Must stay well under AssistantController::LOCK_SECONDS, or two requests can work on one chat.
     public const BUDGET_SECONDS = 840;
 
     public const CORE = ['get_workspace', 'list_machines', 'list_services', 'get_service', 'get_service_logs', 'list_deploys', 'list_templates', 'list_workflow_templates', 'get_job', 'search'];
@@ -56,6 +55,10 @@ class AssistantAgent
     private const ALWAYS_ASK = [
         'install_packages', 'install_updates', 'create_package_rollout', 'open_port', 'close_port', 'reboot_machine',
         'create_workflow', 'update_workflow', 'run_workflow',
+        'invite_member', 'change_member_role', 'update_workspace',
+        'deploy_from_git', 'deploy_template', 'deploy_new_version', 'update_app_settings', 'set_app_domain', 'clone_service', 'connect_project_app',
+        'create_machine_policy', 'update_machine_policy', 'update_backup_settings', 'update_alert_settings', 'start_maintenance',
+        'adopt_service', 'mute_monitor', 'pause_monitor', 'post_status_incident', 'update_status_incident',
     ];
 
     private const SHOWS_PAGE = ['get_machine', 'get_service', 'get_app', 'get_workflow', 'get_workflow_run', 'get_monitor', 'get_status_page'];
@@ -210,7 +213,6 @@ class AssistantAgent
                 if ($answer['text'] !== '') {
                     ($this->emit)(['type' => 'text', 'text' => $answer['text']]);
                 }
-                // Our own ids: the model may reuse one, and an approval must name exactly one call.
                 foreach ($answer['calls'] as $i => $call) {
                     $answer['calls'][$i]['id'] = 'call_'.Str::lower(Str::random(24));
                 }
@@ -286,7 +288,6 @@ class AssistantAgent
         return true;
     }
 
-    // Always answer a tool call: one left unanswered breaks every later turn.
     /** @param  array{id: string, name: string, arguments: array<string, mixed>}  $call */
     private function safeRun(array $call, bool $approved): void
     {
@@ -767,22 +768,20 @@ PROMPT;
     private static function fields(array $arguments): array
     {
         $rows = [];
-        foreach (McpServer::redact($arguments) as $key => $value) {
+        foreach ($arguments as $key => $value) {
             if (in_array($key, ['wait', 'confirm'], true)) {
                 continue;
             }
-            $flat = is_array($value) && array_filter($value, fn ($v) => ! is_scalar($v)) === [];
             $text = match (true) {
                 is_bool($value) => $value ? 'Yes' : 'No',
+                $value === null => 'None',
                 is_scalar($value) => (string) $value,
-                $flat && array_is_list($value) => implode(', ', array_map(fn ($v) => (string) $v, $value)),
-                $flat => implode(', ', array_map(fn ($k, $v) => "{$k}={$v}", array_keys($value), $value)),
-                default => (string) json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                default => (string) json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             };
-            $rows[] = ['label' => Str::ucfirst(str_replace('_', ' ', (string) $key)), 'value' => Str::limit($text, 300)];
+            $rows[] = ['label' => Str::ucfirst(str_replace('_', ' ', (string) $key)), 'value' => $text];
         }
 
-        return array_slice($rows, 0, 12);
+        return $rows;
     }
 
     /** @param  array<mixed>  $data */

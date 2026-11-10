@@ -7,7 +7,7 @@
 # This script is short on purpose. Read it. It:
 #   1. checks this is Linux with systemd, root, and a supported CPU
 #   2. downloads the serverosd binary for this machine and verifies its
-#      SHA-256 against the published checksum file
+#      checksum and, when this panel has a release key, its signature
 #   3. installs it to /usr/local/bin/serverosd
 #   4. runs `serverosd enrol`, which does the rest and prints each step
 #
@@ -23,6 +23,7 @@ set -euo pipefail
 INSTALLER_VERSION="1"
 PANEL="${SERVEROS_PANEL:-__SERVEROS_PANEL_URL__}"
 RELEASES="${SERVEROS_RELEASES:-__SERVEROS_RELEASES_URL__}"
+RELEASE_KEY="__SERVEROS_RELEASE_PUBKEY__"
 VERSION="${SERVEROS_VERSION:-latest}"
 TOKEN=""
 BIN=/usr/local/bin/serverosd
@@ -88,6 +89,20 @@ EXPECTED="$(grep " ${ASSET}\$" "$TMP/SHA256SUMS" | awk '{print $1}')"
 ACTUAL="$(sha256sum "$TMP/$ASSET" | awk '{print $1}')"
 [ "$EXPECTED" = "$ACTUAL" ] || fail "checksum mismatch for $ASSET (expected $EXPECTED, got $ACTUAL). The download is corrupt or tampered with; nothing was installed."
 say "checksum verified"
+
+if [ -n "$RELEASE_KEY" ]; then
+  command -v openssl >/dev/null || fail "openssl is required to check the release signature; install it and re-run."
+  SIGNATURE="$(curl -fsSL "$PANEL/api/daemon/releases/latest?arch=${ARCH}&version=${VERSION//+/%2B}" 2>/dev/null \
+    | sed -n 's/.*"signature":"\([^"]*\)".*/\1/p' | tr -d '\\' || true)"
+  [ -n "$SIGNATURE" ] || fail "no signature published for $ASSET on $PANEL; refusing to install an unverifiable binary."
+  printf '%s' "$SIGNATURE" | base64 -d > "$TMP/release.sig" 2>/dev/null || fail "the signature for $ASSET isn't valid base64."
+  printf "$(printf '302a300506032b6570032100%s' "$RELEASE_KEY" | sed 's/../\\x&/g')" > "$TMP/release.pub"
+  openssl pkeyutl -verify -pubin -keyform DER -inkey "$TMP/release.pub" -rawin -in "$TMP/$ASSET" -sigfile "$TMP/release.sig" >/dev/null 2>&1 \
+    || fail "signature check failed for $ASSET. The download is tampered with, or not a ServerOS release; nothing was installed."
+  say "signature verified"
+else
+  say "signature not checked (this panel has no release key set)"
+fi
 
 install -m 0755 "$TMP/$ASSET" "$BIN"
 say "installed $BIN"

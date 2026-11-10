@@ -54,6 +54,19 @@ test('CI registers releases with the deploy token, and daemons read the latest f
     $this->getJson('/api/daemon/releases/latest?channel=stable&arch=aarch64')->assertNotFound();
 });
 
+test('the installer can read the signature of the exact version it downloads', function () {
+    config()->set('daemon.deploy_token', 'ci-secret');
+    serveRelease('v0.1.1-pre.1', 'amd64');
+    serveRelease('v0.1.0', 'amd64');
+    $this->withToken('ci-secret')->postJson('/api/daemon/releases', releasePayload(['channel' => 'stable', 'signature' => 'bmV3ZXI=']))->assertCreated();
+    $this->withToken('ci-secret')->postJson('/api/daemon/releases', releasePayload(['version' => 'v0.1.0', 'channel' => 'stable', 'signature' => 'b2xkZXI=']))->assertCreated();
+
+    $this->getJson('/api/daemon/releases/latest?arch=amd64&version=v0.1.0')->assertOk()->assertJson(['version' => 'v0.1.0', 'signature' => 'b2xkZXI=']);
+    $this->getJson('/api/daemon/releases/latest?arch=amd64')->assertJson(['version' => 'v0.1.1-pre.1']);
+    $this->getJson('/api/daemon/releases/latest?arch=amd64&version=v9.9.9')->assertNotFound();
+    $this->getJson('/api/daemon/releases/latest?arch=arm64&version=v0.1.0')->assertNotFound();
+});
+
 test('versions order like semver, prereleases included', function () {
     expect(DaemonRelease::compare('v0.1.0-pre.2', 'v0.1.0-pre.1'))->toBe(1)
         ->and(DaemonRelease::compare('0.1.0-pre.10', '0.1.0-pre.9'))->toBe(1)

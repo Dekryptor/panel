@@ -1,6 +1,4 @@
-// Must load first: polyfills Inertia needs on older browsers.
 import '@/lib/polyfills';
-// Before any page or layout, so translations are ready.
 import { installI18n } from '@/lib/i18n';
 import { installFieldErrors } from '@/lib/fieldErrors';
 import { createInertiaApp, router } from '@inertiajs/vue3';

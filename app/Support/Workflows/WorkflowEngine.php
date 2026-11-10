@@ -3,6 +3,7 @@
 namespace App\Support\Workflows;
 
 use App\Enums\WorkspacePermission;
+use App\Jobs\OpenAgentPullRequest;
 use App\Models\Activity;
 use App\Models\Backup;
 use App\Models\DaemonJob;
@@ -18,7 +19,9 @@ use App\Notifications\WorkflowMessage;
 use App\Support\Audit\AuditContext;
 use App\Support\Backups\BackupRunner;
 use App\Support\DaemonJobQueue;
+use App\Support\Edition;
 use App\Support\Extensions\Extensions;
+use App\Support\GitHub\GitHubApp;
 use App\Support\Monitors\HostResolver;
 use App\Support\Monitors\MonitorAlerts;
 use App\Support\Monitors\MonitorRunner;
@@ -28,10 +31,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 use RuntimeException;
 use Throwable;
 
-/** @phpstan-type StepResult array{state: string, message?: string, port?: string, jobs?: list<string>, until?: int, deadline?: int, timeout?: int, summary?: string, pr?: string|null, model?: string|null} */
+/** @phpstan-type StepResult array{state: string, message?: string, port?: string, jobs?: list<string>, until?: int, deadline?: int, timeout?: int, summary?: string, pr?: string|null, model?: string|null, phase?: string|null} */
 class WorkflowEngine
 {
     public const MAX_STEPS = 50;
@@ -154,6 +158,9 @@ class WorkflowEngine
             $copyFailed = fn (DaemonJob $j) => in_array($node['kind'], ['copy_data', 'command', 'agent'], true) && (int) ($j->result['exit_code'] ?? 0) !== 0;
             $failed = $jobs->first(fn (DaemonJob $j) => $j->state !== 'succeeded' || $copyFailed($j));
             if ($node['kind'] === 'agent') {
+                if (($step['phase'] ?? null) === 'pull_request') {
+                    return;
+                }
                 $this->settle($run, $node, $this->agentFinished($run, $node, $jobs->first(), $failed !== null));
                 $run->save();
 
@@ -472,10 +479,14 @@ class WorkflowEngine
             return ['state' => 'failed', 'message' => "{$user->name} needs two-factor authentication on for workflows to run commands as them."];
         }
 
+        [$command, $env] = WorkflowText::shell((string) $rules['command'], $run);
+        if ($env !== [] && ! DaemonJobQueue::canExecEnv($machine)) {
+            return ['state' => 'failed', 'message' => "Update the ServerOS daemon on {$machine->name} to use placeholders in commands."];
+        }
         $text = WorkflowText::render((string) $rules['command'], $run);
 
         return $this->sent($run, $node, fn () => $this->queue->queue($machine, $user, 'service_exec', [
-            'type' => 'service_exec', 'service' => $key, 'command' => $text, 'timeout_secs' => 300,
+            'type' => 'service_exec', 'service' => $key, 'command' => $command, 'timeout_secs' => 300, ...($env === [] ? [] : ['env' => $env]),
         ], $key), "Running “{$text}” in {$service['name']}");
     }
 
@@ -541,11 +552,84 @@ class WorkflowEngine
                 : $this->jobError($job))];
         }
 
+        if ($outcome['changes'] && (bool) (((array) $node['rules'])['pull_request'] ?? false)) {
+            OpenAgentPullRequest::dispatch($run->id, $node['id'], $job->id)->afterCommit();
+            $started = (int) ($run->steps[$node['id']]['startedAt'] ?? now()->getTimestamp());
+
+            return [...$kept, 'state' => 'running', 'phase' => 'pull_request', 'timeout' => (int) ceil((now()->getTimestamp() - $started) / 60) + 10,
+                'message' => "Opening a pull request with the agent’s change{$by}"];
+        }
+
         return [...$kept, 'state' => 'succeeded', 'message' => match (true) {
             $outcome['pr'] !== null => "Opened {$outcome['pr']}{$by}",
             $outcome['note'] !== null => $outcome['note'].$by,
             default => "The agent finished{$by}",
         }];
+    }
+
+    public function agentPullRequest(int $runId, string $nodeId, string $jobId): void
+    {
+        $run = WorkflowRun::query()->find($runId);
+        $job = DaemonJob::query()->find($jobId);
+        $node = $run === null ? null : $this->node($run, $nodeId);
+        if ($run === null || $job === null || $node === null || $run->finished() || ($run->steps[$nodeId]['phase'] ?? null) !== 'pull_request') {
+            return;
+        }
+
+        $rules = (array) $node['rules'];
+        $outcome = AgentSpec::outcome($job);
+        $agent = AgentSpec::AGENTS[(string) (($rules['agent'] ?? '') ?: 'claude')] ?? 'The agent';
+        $by = $outcome['model'] !== null ? " ({$agent}, {$outcome['model']})" : " ({$agent})";
+        try {
+            $url = $this->openAgentPullRequest($run, $nodeId, $rules, $job, $outcome);
+            $result = $url === null
+                ? ['state' => 'succeeded', 'phase' => null, 'message' => "The agent didn’t change any code, so there’s no pull request{$by}"]
+                : ['state' => 'succeeded', 'phase' => null, 'pr' => $url, 'message' => "Opened {$url}{$by}"];
+        } catch (RuntimeException $e) {
+            $result = ['state' => 'failed', 'phase' => null, 'message' => $e->getMessage()];
+        } catch (Throwable $e) {
+            report($e);
+            $result = ['state' => 'failed', 'phase' => null, 'message' => 'Something went wrong opening the pull request.'];
+        }
+
+        DB::transaction(function () use ($run, $node, $nodeId, $result) {
+            $locked = WorkflowRun::query()->lockForUpdate()->findOrFail($run->id);
+            $run->setRawAttributes($locked->getAttributes(), true);
+            $step = $run->steps[$nodeId] ?? null;
+            if ($run->finished() || ($step['state'] ?? null) !== 'running' || ($step['phase'] ?? null) !== 'pull_request') {
+                return;
+            }
+            $this->settle($run, $node, $result);
+            $run->save();
+        });
+
+        $this->advance($run);
+    }
+
+    /**
+     * @param  array<string, mixed>  $rules
+     * @param  array{summary: string, model: string|null, stat: string|null}  $outcome
+     *
+     * @throws RuntimeException
+     */
+    private function openAgentPullRequest(WorkflowRun $run, string $nodeId, array $rules, DaemonJob $job, array $outcome): ?string
+    {
+        $workflow = $run->workflow;
+        $user = $workflow->runAs;
+        if ($user === null || ! $workflow->workspace->allows($user, WorkspacePermission::ManageMachines)) {
+            throw new RuntimeException('Whoever last saved this workflow can no longer manage machines. Save it again as someone who can.');
+        }
+        $changes = AgentSpec::changes($job);
+        if ($changes['files'] === []) {
+            return null;
+        }
+        [$owner, $name] = AgentSpec::repository($run, $rules) ?? throw new RuntimeException('The repository the trigger gave isn’t owner/name on GitHub.');
+        $github = app(GitHubApp::class);
+        $token = $github->writeTokenFor($workflow->workspace, $owner, $name)
+            ?? throw new RuntimeException("ServerOS’s GitHub App can’t write to {$owner}/{$name}. Let it write to the repository, then run this again.");
+
+        return $github->openPullRequest($token, $owner, $name, $changes['base'], AgentSpec::branch($run, $rules), AgentSpec::pullRequestBranch($run, $nodeId),
+            $changes['files'], AgentSpec::commitMessage($run, $rules, $outcome), AgentSpec::title($run, $rules), AgentSpec::pullRequestBody($run, $rules, $outcome));
     }
 
     /**
@@ -725,6 +809,15 @@ class WorkflowEngine
                 ['workflow' => ['id' => $workflow->id, 'name' => $workflow->name, 'run' => $run->id]]);
         }
         if ($emails !== []) {
+            $outside = array_values(array_diff($emails, $workspace->members()->pluck('email')->map(fn (string $e) => strtolower($e))->all()));
+            $cap = (int) config('serveros.workflow_outside_emails_per_day');
+            $key = "workflow-outside-emails:{$workspace->id}";
+            if ($outside !== [] && ! Edition::selfHosted()) {
+                if (RateLimiter::attempts($key) + count($outside) > $cap) {
+                    return ['state' => 'failed', 'message' => 'Didn’t email '.implode(', ', $emails).": workflows can email up to {$cap} people outside the workspace a day."];
+                }
+                RateLimiter::increment($key, 86400, count($outside));
+            }
             try {
                 Notification::route('mail', $emails)->notify(new WorkflowMessage($subject, $message, $workspace->name, $workspace->owner?->email, $bad, app(Extensions::class)->poweredByUrl($workspace)));
             } catch (Throwable $e) {

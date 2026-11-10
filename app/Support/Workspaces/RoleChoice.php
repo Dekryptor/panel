@@ -2,6 +2,7 @@
 
 namespace App\Support\Workspaces;
 
+use App\Enums\WorkspacePermission;
 use App\Enums\WorkspaceRole;
 use App\Models\Workspace;
 use App\Models\WorkspaceCustomRole;
@@ -46,6 +47,12 @@ final class RoleChoice
     public function matches(string $role, ?int $customRoleId): bool
     {
         return $this->role->value === $role && $this->custom?->id === $customRoleId;
+    }
+
+    /** @return list<WorkspacePermission> */
+    public function permissions(): array
+    {
+        return Workspace::permissionsFor($this->role, $this->custom);
     }
 
     public function label(): string

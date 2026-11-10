@@ -19,15 +19,9 @@ abstract class SignInHooks
         return null;
     }
 
-    public function signedIn(Request $request, User $user, string $method): void
-    {
-        //
-    }
+    public function signedIn(Request $request, User $user, string $method): void {}
 
-    public function challenged(Request $request): void
-    {
-        //
-    }
+    public function challenged(Request $request): void {}
 
     public function signingOut(Request $request): ?string
     {
@@ -46,8 +40,5 @@ abstract class SignInHooks
     }
 
     /** @param  array<string, mixed>  $carried */
-    public function receiveHandoff(Request $request, array $carried, User $user): void
-    {
-        //
-    }
+    public function receiveHandoff(Request $request, array $carried, User $user): void {}
 }

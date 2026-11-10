@@ -2,6 +2,7 @@
 
 namespace App\Support\Maintenance;
 
+use App\Enums\WorkspacePermission;
 use App\Models\Activity;
 use App\Models\DaemonJob;
 use App\Models\Machine;
@@ -96,6 +97,11 @@ class ScheduledMaintenance
     public function start(MaintenanceWindow $window): void
     {
         $machine = $window->machine;
+        if ($machine->workspace_id !== $window->workspace_id) {
+            $window->forceFill(['state' => 'cancelled', 'finished_at' => now(), 'outcome' => 'The machine moved to another workspace.'])->save();
+
+            return;
+        }
         if ($window->ends_at->isPast()) {
             $window->forceFill(['state' => 'done', 'started_at' => now(), 'finished_at' => now(), 'outcome' => 'Missed: its time had passed before it could start.'])->save();
 
@@ -216,7 +222,8 @@ class ScheduledMaintenance
         $machine = $window->machine;
         $user = $window->creator;
         $reason = match (true) {
-            $user === null => 'Whoever planned it has left the workspace, so nothing was run.',
+            $machine->workspace_id !== $window->workspace_id => $machine->name.' moved to another workspace, so nothing was run.',
+            $user === null || ! $window->workspace->allows($user, WorkspacePermission::ManageMachines) => 'Whoever planned it has left the workspace or can’t manage machines any more, so nothing was run.',
             ! $machine->isOnline() => $machine->name.' wasn’t reporting when it started, so nothing was run.',
             default => $this->queue->unavailable($machine),
         };

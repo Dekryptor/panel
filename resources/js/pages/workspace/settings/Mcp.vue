@@ -18,6 +18,11 @@ import { toast } from '@/lib/toast';
 import InputError from '@/components/InputError.vue';
 import { Input } from '@/components/ui/input';
 import {
+    InputOTP,
+    InputOTPGroup,
+    InputOTPSlot,
+} from '@/components/ui/input-otp';
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -68,6 +73,7 @@ const props = defineProps<{
     guideUrl: string;
     termsAccepted: boolean;
     twoFactor: boolean;
+    consoleUnlocked: boolean;
     canChange: boolean;
     seesAll: boolean;
     scopes: Record<string, { label: string; description: string }>;
@@ -159,6 +165,13 @@ const keyAccess = ref<'read' | 'write' | 'commands'>(
 );
 const creating = ref(false);
 const keyErrors = ref<Record<string, string>>({});
+const keyCode = ref('');
+const codeAsked = ref(false);
+const needsCode = computed(
+    () =>
+        keyAccess.value === 'commands' &&
+        (!props.consoleUnlocked || codeAsked.value),
+);
 const created = ref<{ secret: string; scopes: string[] } | null>(null);
 const keyOpen = ref(false);
 const keyStep = ref<'form' | 'secret'>('form');
@@ -166,6 +179,8 @@ const keyStep = ref<'form' | 'secret'>('form');
 function newKey(): void {
     keyName.value = '';
     keyErrors.value = {};
+    keyCode.value = '';
+    codeAsked.value = false;
     keyStep.value = 'form';
     keyOpen.value = true;
 }
@@ -193,6 +208,7 @@ async function createKey(): Promise<void> {
             body: JSON.stringify({
                 name: keyName.value.trim(),
                 access: keyAccess.value,
+                code: needsCode.value ? keyCode.value : undefined,
             }),
         });
         const body = (await response.json().catch(() => ({}))) as {
@@ -208,13 +224,15 @@ async function createKey(): Promise<void> {
             if (!body.errors)
                 keyErrors.value.name =
                     body.message ?? trans('Couldn’t make the key.');
+            if (keyErrors.value.code) codeAsked.value = true;
+            keyCode.value = '';
             return;
         }
         created.value = { secret: body.secret, scopes: body.scopes ?? [] };
         keyName.value = '';
         keyStep.value = 'secret';
         withKey.value = true;
-        router.reload({ only: ['connections'] });
+        router.reload({ only: ['connections', 'consoleUnlocked'] });
     } finally {
         creating.value = false;
     }
@@ -886,6 +904,29 @@ const snippet = computed(() =>
                         </div>
                         <InputError :message="keyErrors.access" />
                     </div>
+
+                    <div v-if="needsCode" class="flex flex-col gap-1.5">
+                        <span :class="labelClass">{{ $t('Code') }}</span>
+                        <span class="text-[12px]/4 text-(--ds-text-muted)">{{
+                            $t(
+                                'Enter the 6-digit code from your authenticator app',
+                            )
+                        }}</span>
+                        <InputOTP
+                            v-model="keyCode"
+                            :maxlength="6"
+                            :disabled="creating"
+                        >
+                            <InputOTPGroup>
+                                <InputOTPSlot
+                                    v-for="index in 6"
+                                    :key="index"
+                                    :index="index - 1"
+                                />
+                            </InputOTPGroup>
+                        </InputOTP>
+                        <InputError :message="keyErrors.code" />
+                    </div>
                 </div>
 
                 <div
@@ -902,7 +943,10 @@ const snippet = computed(() =>
                         :label="$t('Make key')"
                         busy-label="Making…"
                         :processing="creating"
-                        :disabled="keyName.trim() === ''"
+                        :disabled="
+                            keyName.trim() === '' ||
+                            (needsCode && keyCode.length !== 6)
+                        "
                     />
                 </div>
             </form>

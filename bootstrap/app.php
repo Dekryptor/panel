@@ -3,12 +3,14 @@
 use App\Http\Middleware\AccountGuard;
 use App\Http\Middleware\AdminOnMainDomain;
 use App\Http\Middleware\AllowWorkspacePasskeys;
+use App\Http\Middleware\BindCustomDomainSession;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequirePasswordIfSet;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\RestoreCustomDomain;
 use App\Http\Middleware\RunPackageWebMiddleware;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SendToInstaller;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ThrottlePerRoute;
@@ -17,6 +19,7 @@ use App\Http\Middleware\TrustCloudflare;
 use App\Support\Edition;
 use App\Support\ErrorPage;
 use App\Support\Extensions\Extensions;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -41,7 +44,6 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Each prepend goes in front, so these run in reverse: Cloudflare first.
         $middleware->prepend(ResolveCustomDomain::class);
         $middleware->prepend(TrustCloudflare::class);
         $middleware->prepend(SendToInstaller::class);
@@ -58,9 +60,10 @@ return Application::configure(basePath: dirname(__DIR__))
             ? url('/login')
             : rtrim((string) config('app.url'), '/').'/login');
 
-        $middleware->web(prepend: [RestoreCustomDomain::class, AdminOnMainDomain::class]);
+        $middleware->web(prepend: [SecurityHeaders::class, RestoreCustomDomain::class, AdminOnMainDomain::class]);
 
         $middleware->web(append: [
+            BindCustomDomainSession::class,
             SetLocale::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
@@ -71,6 +74,7 @@ return Application::configure(basePath: dirname(__DIR__))
             AllowWorkspacePasskeys::class,
             RunPackageWebMiddleware::class.':'.Extensions::WEB_END,
         ]);
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, BindCustomDomainSession::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         Integration::handles($exceptions);

@@ -103,7 +103,6 @@
         </x-inertia::head>
     </head>
     <body class="font-sans antialiased">
-        {{-- These markers keep Cloudflare's email obfuscation from rewriting the HTML under React and Vue. --}}
         <!--email_off-->
         @if ($indexable && ! empty($page['props']['meta']['title']))
             <header id="page-outline" class="sr-only">

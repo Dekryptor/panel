@@ -14,11 +14,17 @@ class DaemonInstallScriptController extends Controller
             '__SERVEROS_INSTALL_URL__' => self::safe(config('daemon.install_url')),
             '__SERVEROS_PANEL_URL__' => self::safe(config('daemon.panel_url')),
             '__SERVEROS_RELEASES_URL__' => self::safe(config('daemon.releases_url')),
+            '__SERVEROS_RELEASE_PUBKEY__' => self::key(config('daemon.release_pubkey')),
         ]), 200, [
             'Content-Type' => 'text/plain; charset=UTF-8',
             'Cache-Control' => 'public, max-age=300',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+    }
+
+    private static function key(mixed $key): string
+    {
+        return is_string($key) && preg_match('/^[0-9a-f]{64}$/i', trim($key)) === 1 ? strtolower(trim($key)) : '';
     }
 
     private static function safe(mixed $url): string

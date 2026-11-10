@@ -154,7 +154,7 @@ class HandleInertiaRequests extends Middleware
             'githubApp' => GitHubApp::enabled(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'staff' => fn () => [
-                'admin' => $request->user()?->can('viewAdmin') === true,
+                'admin' => $request->user()?->can('viewAdmin') === true || StaffTwoFactor::missing($request->user()),
                 'sales' => $request->user()?->can('viewSales') === true && Router::has('admin.sales.index'),
             ],
             ...($request->routeIs('admin.*') ? ['adminNav' => fn () => app(Extensions::class)->adminNavFor($request->user())] : []),

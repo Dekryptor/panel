@@ -98,6 +98,45 @@ final class GitHubApp
         return $response->successful() && is_string($sha) && preg_match('/^[0-9a-f]{40}$/', $sha) === 1 ? $sha : null;
     }
 
+    /**
+     * @param  list<array{path: string, mode: string, content: string|null}>  $files
+     *
+     * @throws RuntimeException
+     */
+    public function openPullRequest(string $token, string $owner, string $repo, string $base, string $into, string $branch, array $files, string $message, string $title, string $body): string
+    {
+        $client = $this->client()->timeout(30)->withToken($token);
+        $api = self::API.'/repos/'.rawurlencode($owner).'/'.rawurlencode($repo);
+        $send = function (string $method, string $path, array $data = []) use ($client, $api): array {
+            try {
+                $response = $method === 'GET' ? $client->get($api.$path) : $client->post($api.$path, $data);
+            } catch (ConnectionException) {
+                throw new RuntimeException('GitHub didn’t answer, so no pull request was opened.');
+            }
+            if (! $response->successful() || ! is_array($response->json())) {
+                throw new RuntimeException('GitHub answered '.$response->status().': '.mb_substr((string) ($response->json('message') ?? 'no reason given'), 0, 200));
+            }
+
+            return $response->json();
+        };
+
+        $tree = $send('GET', "/git/commits/{$base}")['tree']['sha'] ?? null;
+        $entries = [];
+        foreach ($files as $file) {
+            $sha = $file['content'] === null ? null : ($send('POST', '/git/blobs', ['content' => $file['content'], 'encoding' => 'base64'])['sha'] ?? null);
+            $entries[] = ['path' => $file['path'], 'mode' => $file['mode'], 'type' => 'blob', 'sha' => $sha];
+        }
+        $newTree = $send('POST', '/git/trees', ['base_tree' => $tree, 'tree' => $entries])['sha'] ?? null;
+        $commit = $send('POST', '/git/commits', ['message' => $message, 'tree' => $newTree, 'parents' => [$base]])['sha'] ?? null;
+        $send('POST', '/git/refs', ['ref' => "refs/heads/{$branch}", 'sha' => $commit]);
+        $url = $send('POST', '/pulls', ['title' => $title, 'head' => $branch, 'base' => $into, 'body' => $body])['html_url'] ?? null;
+        if (! is_string($url) || preg_match('#^https://github\.com/\S+/pull/\d+$#', $url) !== 1) {
+            throw new RuntimeException('GitHub opened the pull request but didn’t say where.');
+        }
+
+        return $url;
+    }
+
     public static function signed(string $body, ?string $signature): bool
     {
         $secret = (string) config('services.github_app.webhook_secret');
@@ -121,7 +160,8 @@ final class GitHubApp
         return $response->successful() && is_array($response->json()) ? $response->json() : null;
     }
 
-    public function userCanSee(string $code, int $installationId): bool
+    /** @return array{login: string, type: string|null, repository_ids: list<int>|null}|null */
+    public function confirmInstaller(string $code, int $installationId): ?array
     {
         try {
             $token = Http::timeout(10)->acceptJson()->post('https://github.com/login/oauth/access_token', [
@@ -130,32 +170,85 @@ final class GitHubApp
                 'code' => $code,
             ])->json('access_token');
             if (! is_string($token) || $token === '') {
-                return false;
+                return null;
             }
 
-            for ($page = 1; $page <= 10; $page++) {
-                $response = $this->client()->withToken($token)->get(self::API.'/user/installations', ['per_page' => 100, 'page' => $page]);
-                $installations = $response->json('installations');
-                if (! $response->successful() || ! is_array($installations)) {
-                    return false;
-                }
-                if (collect($installations)->contains(fn ($i) => (int) ($i['id'] ?? 0) === $installationId)) {
-                    return true;
-                }
-                if (count($installations) < 100) {
-                    return false;
-                }
+            $account = $this->installation($installationId)['account'] ?? null;
+            if (! is_array($account) || ! is_string($account['login'] ?? null)) {
+                return null;
             }
+            $login = $account['login'];
+            $type = is_string($account['type'] ?? null) ? $account['type'] : null;
+            $user = $this->client()->withToken($token);
+
+            if ($type === 'User') {
+                $id = $user->get(self::API.'/user')->json('id');
+
+                return is_int($id) && $id === ($account['id'] ?? null)
+                    ? ['login' => $login, 'type' => $type, 'repository_ids' => null]
+                    : null;
+            }
+
+            $membership = $user->get(self::API.'/user/memberships/orgs/'.rawurlencode($login));
+            if ($membership->successful() && $membership->json('state') === 'active' && $membership->json('role') === 'admin') {
+                return ['login' => $login, 'type' => $type, 'repository_ids' => null];
+            }
+
+            $repositories = $this->repositoriesAdministered($user, $installationId);
+
+            return $repositories === null ? null : ['login' => $login, 'type' => $type, 'repository_ids' => $repositories];
         } catch (ConnectionException) {
-            return false;
+            return null;
+        }
+    }
+
+    /** @return list<int>|null */
+    private function repositoriesAdministered(PendingRequest $user, int $installationId): ?array
+    {
+        $theirs = $this->repositories($user, self::API."/user/installations/{$installationId}/repositories");
+        $token = $this->asApp()->post(self::API."/app/installations/{$installationId}/access_tokens", [
+            'permissions' => ['metadata' => 'read'],
+        ])->json('token');
+        $all = is_string($token) ? $this->repositories($this->client()->withToken($token), self::API.'/installation/repositories') : null;
+        if ($theirs === null || $all === null || $all === []) {
+            return null;
         }
 
-        return false;
+        $administered = collect($theirs)
+            ->filter(fn (array $repository) => ($repository['permissions']['admin'] ?? false) === true)
+            ->map(fn (array $repository) => (int) ($repository['id'] ?? 0))
+            ->all();
+        $ids = collect($all)->map(fn (array $repository) => (int) ($repository['id'] ?? 0))->unique()->sort();
+
+        return $ids->every(fn (int $id) => $id > 0 && in_array($id, $administered, true)) ? array_values($ids->all()) : null;
+    }
+
+    /** @return list<array<string, mixed>>|null */
+    private function repositories(PendingRequest $client, string $url): ?array
+    {
+        $all = [];
+        for ($page = 1; $page <= 10; $page++) {
+            $response = $client->get($url, ['per_page' => 100, 'page' => $page]);
+            $repositories = $response->json('repositories');
+            if (! $response->successful() || ! is_array($repositories)) {
+                return null;
+            }
+            foreach ($repositories as $repository) {
+                if (is_array($repository)) {
+                    $all[] = $repository;
+                }
+            }
+            if (count($repositories) < 100) {
+                return $all;
+            }
+        }
+
+        return null;
     }
 
     private function repositoryToken(GitHubInstallation $installation, string $repo, bool $write = false): ?string
     {
-        $key = "github:token:{$installation->installation_id}:".strtolower($repo);
+        $key = "github:token:{$installation->id}:".strtolower($repo);
         $cached = $write ? null : Cache::get($key);
         if (is_string($cached)) {
             return $cached;
@@ -179,7 +272,7 @@ final class GitHubApp
         }
 
         $token = $response->json('token');
-        if (! $response->successful() || ! is_string($token)) {
+        if (! $response->successful() || ! is_string($token) || ! $this->grantsOnly($installation, $response->json('repositories'))) {
             return null;
         }
         if (! $write) {
@@ -187,6 +280,18 @@ final class GitHubApp
         }
 
         return $token;
+    }
+
+    private function grantsOnly(GitHubInstallation $installation, mixed $repositories): bool
+    {
+        if ($installation->repository_ids === null) {
+            return true;
+        }
+        if (! is_array($repositories) || $repositories === []) {
+            return false;
+        }
+
+        return collect($repositories)->every(fn (mixed $repository) => is_array($repository) && $installation->allows((int) ($repository['id'] ?? 0)));
     }
 
     private function asApp(): PendingRequest

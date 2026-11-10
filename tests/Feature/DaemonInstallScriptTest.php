@@ -30,3 +30,18 @@ test('a package can serve its own installer', function () {
 
     expect($this->get('/install.sh')->assertOk()->getContent())->toBe("#!/bin/sh\necho ours\n");
 });
+
+test('the installer checks the release signature with this panel’s key before installing', function () {
+    config()->set('daemon.release_pubkey', str_repeat('AB', 32));
+
+    $script = $this->get('/install.sh')->assertOk()->getContent();
+
+    expect($script)->toContain('RELEASE_KEY="'.str_repeat('ab', 32).'"')
+        ->and(strpos($script, 'openssl pkeyutl -verify'))->toBeLessThan(strpos($script, 'install -m 0755'));
+});
+
+test('a release key that isn’t one is left out of the installer', function () {
+    config()->set('daemon.release_pubkey', 'ab"; rm -rf / #');
+
+    expect($this->get('/install.sh')->assertOk()->getContent())->toContain('RELEASE_KEY=""');
+});

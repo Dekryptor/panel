@@ -23,7 +23,6 @@ class SendWeeklySummaries extends Command
             ->where(fn ($q) => $q->whereNull('summary_sent_at')->orWhere('summary_sent_at', '<', now()->subDays(6)))
             ->chunkById(50, function ($workspaces) use ($summaries, &$sent) {
                 foreach ($workspaces as $workspace) {
-                    // Marked before sending, so a failure part-way never sends twice.
                     $workspace->forceFill(['summary_sent_at' => now()])->saveQuietly();
                     try {
                         $summary = $summaries->build($workspace);

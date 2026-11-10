@@ -280,7 +280,6 @@ class LogController extends Controller
         ];
     }
 
-    // One query per machine: "machine_id in (...) order by id desc" can't use the index and reads far too much.
     /**
      * @param  EloquentCollection<int, Machine>  $machines
      * @param  array{machine: int|null, service: string|null, level: string|null, q: string|null, range: string|null}  $filters

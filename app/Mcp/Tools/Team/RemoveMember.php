@@ -9,6 +9,8 @@ use App\Mcp\Schema;
 use App\Mcp\Scopes;
 use App\Mcp\Tool;
 use App\Mcp\ToolError;
+use App\Models\McpToken;
+use App\Models\WorkspaceJoinRequest;
 
 final class RemoveMember extends Tool
 {
@@ -64,6 +66,9 @@ final class RemoveMember extends Tool
         if ($workspace->roleOf($member) === WorkspaceRole::Owner) {
             throw new ToolError($leaving ? 'Owners can’t leave their own workspace.' : 'The owner can’t be removed.');
         }
+        if (! $leaving && ! $workspace->canGrant($context->user, $workspace->permissionsOf($member))) {
+            throw new ToolError("{$member->name} has access you don’t, so you can’t remove them.");
+        }
 
         $given = trim((string) ($data['confirm'] ?? ''));
         if ($given === '') {
@@ -74,6 +79,8 @@ final class RemoveMember extends Tool
         }
 
         $workspace->members()->detach($member->id);
+        McpToken::revokeFor($workspace, $member);
+        WorkspaceJoinRequest::blockReturn($workspace, $member, $context->user);
         $context->record($leaving ? 'member.leave' : 'member.remove', $member->name);
 
         return [

@@ -6,7 +6,8 @@
 #   docker compose logs -f     what it's doing
 #
 # Settings come from .env next to this file. SERVEROS_DOMAIN, ACME_EMAIL,
-# APP_KEY, DB_PASSWORD and DAEMON_GATEWAY_SECRET are required.
+# APP_KEY, DB_PASSWORD and DAEMON_GATEWAY_SECRET are required; the install
+# script also sets REDIS_PASSWORD.
 #
 # The image is the official one, ghcr.io/serveroshq/panel: the open source
 # panel plus the paid features (the commercial panel-ee package, under its
@@ -41,6 +42,7 @@ x-panel: &panel
         REDIS_CLIENT: phpredis
         REDIS_HOST: redis
         REDIS_PORT: '6379'
+        REDIS_PASSWORD: ${REDIS_PASSWORD:-}
         CACHE_STORE: redis
         QUEUE_CONNECTION: redis
         LOG_CHANNEL: stderr
@@ -123,7 +125,6 @@ services:
             - '${GATEWAY_PORT:-8443}:8443'
         volumes:
             - gateway:/gateway:ro
-            - caddy-data:/data:ro
         depends_on:
             web:
                 condition: service_healthy
@@ -146,11 +147,22 @@ services:
     redis:
         image: redis:7-bookworm
         restart: unless-stopped
-        command: ['redis-server', '--appendonly', 'yes', '--save', '60', '1000']
+        environment:
+            REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+        command:
+            [
+                'sh',
+                '-c',
+                'exec redis-server --appendonly yes --save 60 1000 $${REDIS_PASSWORD:+--requirepass "$$REDIS_PASSWORD"}',
+            ]
         volumes:
             - redis:/data
         healthcheck:
-            test: ['CMD', 'redis-cli', 'ping']
+            test:
+                [
+                    'CMD-SHELL',
+                    '[ -z "$$REDIS_PASSWORD" ] || export REDISCLI_AUTH="$$REDIS_PASSWORD"; redis-cli ping | grep -q PONG',
+                ]
             interval: 5s
             timeout: 3s
             retries: 20

@@ -18,7 +18,6 @@ export function useWorkspaceSwitch() {
     return { switchingTo, switchTo };
 }
 
-// A page restored from the back/forward cache comes back mid-switch.
 if (typeof window !== 'undefined') {
     window.addEventListener('pageshow', (event) => {
         if (event.persisted) {

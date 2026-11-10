@@ -9,6 +9,7 @@ use App\Support\Audit\NotAudited;
 use App\Support\DeploySources\DeploySourcePacker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -29,14 +30,8 @@ class DeploySourceController extends Controller
             'size.max' => 'That zip is over 1 GB. Leave out node_modules and build folders.',
         ]);
 
-        $source = new DeploySource([
-            'token' => Str::random(48),
-            'filename' => basename($data['filename']),
-            'size' => (int) $data['size'],
-            'expires_at' => now()->addHours(DeploySource::KEEP_HOURS),
-        ]);
-        $source->workspace()->associate($workspace);
-        $source->forceFill(['user_id' => $request->user()->id])->save();
+        $userId = $request->user()->id;
+        $source = Cache::lock("deploy-sources:user:{$userId}", 10)->block(5, fn () => Cache::lock("deploy-sources:workspace:{$workspace->id}", 10)->block(5, fn () => $this->stage($workspace, $userId, $data['filename'], (int) $data['size'])));
         File::ensureDirectoryExists($source->directory());
 
         return response()->json(['id' => $source->token, 'chunk' => DeploySource::CHUNK_BYTES], 201);
@@ -92,6 +87,28 @@ class DeploySourceController extends Controller
             'commit' => $source->commit,
             'upload' => ['filename' => $source->filename, 'files' => $source->files, 'expiresAt' => $source->expires_at->toIso8601String()],
         ]);
+    }
+
+    private function stage(Workspace $workspace, int $userId, string $filename, int $size): DeploySource
+    {
+        $recent = fn (string $column, int $id) => (int) DeploySource::query()
+            ->where($column, $id)
+            ->where('created_at', '>', now()->subHours(DeploySource::KEEP_HOURS))
+            ->sum('size');
+        if (max($recent('workspace_id', $workspace->id), $recent('user_id', $userId)) + $size > DeploySource::DAILY_BYTES) {
+            throw ValidationException::withMessages(['size' => 'You’ve uploaded 5 GB of zips today, the most for a day. Try again tomorrow, or deploy from Git.']);
+        }
+
+        $source = new DeploySource([
+            'token' => Str::random(48),
+            'filename' => basename($filename),
+            'size' => $size,
+            'expires_at' => now()->addHours(DeploySource::KEEP_HOURS),
+        ]);
+        $source->workspace()->associate($workspace);
+        $source->forceFill(['user_id' => $userId])->save();
+
+        return $source;
     }
 
     private function authorize(Workspace $workspace, Machine $machine): void

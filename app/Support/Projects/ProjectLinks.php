@@ -25,6 +25,11 @@ class ProjectLinks
         $link->loadMissing(['app.machine', 'resource.machine', 'project']);
         $app = $link->app;
         $resource = $link->resource;
+        if ($app->machine->workspace_id !== $link->project->workspace_id || $resource->machine->workspace_id !== $link->project->workspace_id) {
+            $link->forceFill(['state' => 'failed', 'error' => 'One of its machines moved to another workspace.'])->save();
+
+            return;
+        }
 
         if ($this->lastDeploy($app) === null) {
             $link->forceFill(['state' => 'pending', 'error' => null])->save();
@@ -128,6 +133,9 @@ class ProjectLinks
     private function write(ProjectLink $link, ProjectNode $app, array $set, array $remove, User $user, array $remember): void
     {
         $machine = $app->machine;
+        if ($machine->workspace_id !== $link->project->workspace_id) {
+            return;
+        }
         $last = Placement::latestDeploy($machine, $app->name);
         if ($last === null || ! $last->isRetryable()) {
             $link->forceFill(['state' => 'failed', 'error' => "{$app->name} has no deploy to change yet. Deploy it, then connect it again."])->save();

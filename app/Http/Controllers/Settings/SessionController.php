@@ -52,7 +52,7 @@ class SessionController extends Controller
         }
 
         DB::table(config('session.table', 'sessions'))->where('id', $session->id)->delete();
-        $this->forgetRememberedBrowsers($request, $user);
+        self::forgetRememberedBrowsers($request, $user);
         AccountEvent::record($user, 'sessions.signed_out', ['scope' => 'one', 'device' => Device::label($session->user_agent) ?? $session->ip_address]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Signed out.')]);
 
@@ -63,18 +63,25 @@ class SessionController extends Controller
     public function destroyOthers(Request $request): RedirectResponse
     {
         $user = $request->user();
-        $count = DB::table(config('session.table', 'sessions'))
-            ->where('user_id', $user->id)
-            ->where('id', '!=', $request->session()->getId())
-            ->delete();
-        $this->forgetRememberedBrowsers($request, $user);
+        $count = self::signOutOthers($request, $user);
         AccountEvent::record($user, 'sessions.signed_out', ['scope' => 'others', 'count' => $count]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Signed out everywhere else.')]);
 
         return back();
     }
 
-    private function forgetRememberedBrowsers(Request $request, User $user): void
+    public static function signOutOthers(Request $request, User $user): int
+    {
+        $count = DB::table(config('session.table', 'sessions'))
+            ->where('user_id', $user->id)
+            ->where('id', '!=', $request->session()->getId())
+            ->delete();
+        self::forgetRememberedBrowsers($request, $user);
+
+        return $count;
+    }
+
+    private static function forgetRememberedBrowsers(Request $request, User $user): void
     {
         $user->forceFill(['remember_token' => Str::random(60)])->saveQuietly();
 

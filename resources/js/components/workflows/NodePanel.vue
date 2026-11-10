@@ -75,7 +75,6 @@ function close(): void {
 }
 
 function goNext(): void {
-    // Read before openInspector(), which recomputes next.
     const target = next.value?.target;
     if (!target) return;
     editor.openInspector(target);

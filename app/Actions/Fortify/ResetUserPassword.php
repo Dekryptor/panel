@@ -22,5 +22,6 @@ class ResetUserPassword implements ResetsUserPasswords
             'password' => $input['password'],
             'password_set_at' => now(),
         ])->save();
+        $user->signOutEverywhere();
     }
 }

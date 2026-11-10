@@ -81,7 +81,6 @@ final class FileJobs
 
     public const string JOBS_DIR = '/var/lib/serveros/jobs';
 
-    // Must match the daemon's mountable_root().
     private const array SYSTEM_ROOTS = [
         '/etc', '/proc', '/sys', '/dev', '/run', '/var/run', '/boot', '/root', '/bin', '/sbin',
         '/lib', '/lib64', '/usr', '/var/lib/docker/containers',

@@ -516,7 +516,7 @@ test('remove_member needs the member’s email to confirm, and records the remov
         ->and($activity->user_id)->toBe($admin->id)
         ->and($activity->meta['via'])->toBe('mcp');
 
-    mcpRequest($workspace, $memberKey, 'tools/list')->assertForbidden();
+    mcpRequest($workspace, $memberKey, 'tools/list')->assertUnauthorized();
 });
 
 test('the owner cannot be removed and cannot leave', function () {
@@ -542,7 +542,7 @@ test('removing yourself is leaving the workspace', function () {
         ->and($workspace->hasMember($admin))->toBeFalse()
         ->and(teamToolsActivity($workspace)->action)->toBe('member.leave');
 
-    mcpRequest($workspace, $key, 'tools/list')->assertForbidden();
+    mcpRequest($workspace, $key, 'tools/list')->assertUnauthorized();
 });
 
 test('remove_member keeps to this workspace', function () {

@@ -4,11 +4,6 @@ namespace App\Support\Monitors;
 
 use App\Models\Workspace;
 
-/**
- * The kinds of alert a workspace can switch off one by one, and which
- * events belong to each. An event in no kind (a workflow's own "Send an
- * alert" step, a test) always goes out: someone asked for it directly.
- */
 final class AlertKinds
 {
     public const EVENTS = [
@@ -19,7 +14,6 @@ final class AlertKinds
         'backups' => ['backup.failed', 'backup.recovered'],
         'monitors' => ['monitor.down', 'monitor.up', 'certificate.expiring'],
         'workflows' => ['workflow.failed'],
-        // Daemon updates waiting for approval, and ones installed.
         'updates' => ['daemon.update_waiting', 'daemon.updated'],
     ];
 

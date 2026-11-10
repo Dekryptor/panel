@@ -38,7 +38,10 @@ class OAuthAuthorizeController extends Controller
 
         $state = $request->query('state');
         $state = is_string($state) ? Str::limit($state, 1000, '') : null;
-        $back = fn (string $error, string $description) => $this->redirectTo($redirect, ['error' => $error, 'error_description' => $description, 'state' => $state]);
+        // Anyone can register a client, so before consent only send errors back to apps we know or to this computer.
+        $back = fn (string $error, string $description) => OAuth::knownApp($redirect) !== null || $this->isLocal($redirect)
+            ? $this->redirectTo($redirect, ['error' => $error, 'error_description' => $description, 'state' => $state])
+            : $this->problem("This app sent a sign-in request ServerOS can’t use. {$description} Try connecting again from the app.");
 
         if ($request->query('response_type') !== 'code') {
             return $back('unsupported_response_type', 'Only response_type=code is supported.');
@@ -63,6 +66,7 @@ class OAuthAuthorizeController extends Controller
             'audience' => $audience->key(),
             'client' => $client->id,
             'redirect' => $redirect,
+            'redirect_sent' => $request->query('redirect_uri') !== null,
             'challenge' => $challenge,
             'state' => $state,
             ...$consent->pending,
@@ -84,6 +88,7 @@ class OAuthAuthorizeController extends Controller
             'workspace' => ['nullable', 'integer'],
             'write' => ['boolean'],
             'commands' => ['boolean'],
+            'code' => ['nullable', 'string', 'max:12'],
         ]);
 
         $pending = $this->pending($request);
@@ -120,6 +125,7 @@ class OAuthAuthorizeController extends Controller
             'user_id' => $user->id,
             'workspace_id' => $grant->workspace?->id,
             'redirect_uri' => $auth['redirect'],
+            'redirect_uri_sent' => (bool) ($auth['redirect_sent'] ?? false),
             'code_challenge' => $auth['challenge'],
             'scopes' => $grant->scopes,
             'resource' => $grant->resource,
@@ -162,6 +168,11 @@ class OAuthAuthorizeController extends Controller
         return is_array($pending) ? $pending : [];
     }
 
+    private function isLocal(string $redirect): bool
+    {
+        return in_array(strtolower((string) parse_url($redirect, PHP_URL_HOST)), ['localhost', '127.0.0.1', '[::1]'], true);
+    }
+
     /** @return array<string, mixed> */
     private function clientProps(McpOAuthClient $client, string $redirect): array
     {
@@ -172,7 +183,7 @@ class OAuthAuthorizeController extends Controller
             'known' => OAuth::knownApp($redirect),
             'redirectHost' => ($parts['host'] ?? null) ?: (($parts['scheme'] ?? '').'://'),
             'redirectUri' => $redirect,
-            'local' => in_array(strtolower($parts['host'] ?? ''), ['localhost', '127.0.0.1', '[::1]'], true),
+            'local' => $this->isLocal($redirect),
             'registeredAt' => $client->created_at?->toIso8601String(),
         ];
     }

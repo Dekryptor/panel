@@ -6,6 +6,7 @@ use App\Enums\WorkspacePermission;
 use App\Enums\WorkspaceRole;
 use App\Http\Requests\UpdateMemberRoleRequest;
 use App\Models\Activity;
+use App\Models\McpToken;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
@@ -134,8 +135,12 @@ class WorkspaceMemberController extends Controller
                 'member' => $leaving ? 'Owners can’t leave their own workspace.' : 'The owner can’t be removed.',
             ]);
         }
+        if (! $leaving && ! $workspace->canGrant($request->user(), $workspace->permissionsOf($member))) {
+            throw ValidationException::withMessages(['member' => 'They have access you don’t, so you can’t remove them.']);
+        }
 
         $workspace->members()->detach($member->id);
+        McpToken::revokeFor($workspace, $member);
         WorkspaceJoinRequest::blockReturn($workspace, $member, $request->user());
         Activity::record($workspace, $leaving ? 'member.leave' : 'member.remove', $member->name);
 

@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Illuminate\Routing\Middleware\ThrottleRequests;
 
-// Laravel's throttle keys by person alone, so every plain-throttled route would share one count.
 class ThrottlePerRoute extends ThrottleRequests
 {
     protected function resolveRequestSignature($request)

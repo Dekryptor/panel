@@ -88,6 +88,9 @@ class SecurityController extends Controller
             'password_set_at' => now(),
         ])->save();
         AccountEvent::record($user, $first ? 'password.set' : 'password.changed');
+        if (! $first) {
+            SessionController::signOutOthers($request, $user);
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => $first ? 'Password set. You can sign in with it now.' : __('Password updated.')]);
 

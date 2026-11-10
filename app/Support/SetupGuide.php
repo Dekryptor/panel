@@ -52,7 +52,7 @@ final class SetupGuide
                 'locked' => null,
                 'steps' => [
                     self::step('members', 'Invite a teammate', 'Share the workspace, with a role each.', '/settings/members', $workspace->members()->count() > 1 || $workspace->invitations()->exists()),
-                    self::step('security', 'Turn on two-factor', 'Or add a passkey, so a password alone can’t get in.', '/settings/security', $user->hasEnabledTwoFactorAuthentication() || $user->passkeys()->exists()),
+                    self::step('security', 'Turn on two-factor', 'Or add a passkey and sign in with it.', '/settings/security', $user->hasEnabledTwoFactorAuthentication() || $user->passkeys()->exists()),
                 ],
             ],
         ];

@@ -207,7 +207,7 @@ test('profile, picture, connected accounts and the MCP terms are recorded once e
     $this->actingAs($user)->post(route('mcp-terms.accept'), ['accepted' => true]);
     $this->actingAs($user)->delete('/settings/connections/github');
     $this->actingAs($user)->patch(route('profile.update'), ['name' => 'Sam', 'email' => 'sam@example.com']);
-    $this->actingAs($user)->patch(route('profile.update'), ['name' => 'Samantha', 'email' => 'sam@new.example.com']);
+    $this->actingAs($user)->patch(route('profile.update'), ['name' => 'Samantha', 'email' => 'sam@new.example.com', 'current_password' => 'password']);
 
     expect(accountLines($user))->toBe([
         'Changed your profile picture',

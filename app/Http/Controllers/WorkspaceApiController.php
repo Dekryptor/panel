@@ -10,6 +10,7 @@ use App\Models\McpToken;
 use App\Models\McpToolCall;
 use App\Models\Workspace;
 use App\Support\Audit\Audited;
+use App\Support\ConsoleLock;
 use App\Support\Docs\DocsUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -22,7 +23,7 @@ class WorkspaceApiController extends Controller
 {
     public const MAX_KEYS = 20;
 
-    public function show(Request $request, Workspace $workspace): Response
+    public function show(Request $request, Workspace $workspace, ConsoleLock $console): Response
     {
         $user = $request->user();
         $seesAll = Gate::allows('manageMembers', $workspace);
@@ -53,6 +54,7 @@ class WorkspaceApiController extends Controller
             'referenceUrl' => DocsUrl::page('reference', 'api-reference'),
             'rateLimit' => $workspace->isActive() ? $workspace->limitOf(Limit::ApiRequestsPerMinute) : null,
             'twoFactor' => $user->hasEnabledTwoFactorAuthentication(),
+            'consoleUnlocked' => $console->isUnlocked($user),
             'canChange' => $workspace->allows($user, WorkspacePermission::ManageMachines),
             'seesAll' => $seesAll,
             'keys' => $keys->map(fn (McpToken $k) => [
@@ -77,12 +79,13 @@ class WorkspaceApiController extends Controller
     }
 
     #[Audited]
-    public function store(Request $request, Workspace $workspace): JsonResponse
+    public function store(Request $request, Workspace $workspace, ConsoleLock $console): JsonResponse
     {
         $user = $request->user();
         $data = $request->validate([
             'name' => ['required', 'string', 'max:80'],
             'access' => ['required', 'in:read,write,commands'],
+            'code' => ['nullable', 'string', 'max:12'],
         ]);
 
         if ($data['access'] !== 'read' && ! $workspace->allows($user, WorkspacePermission::ManageMachines)) {
@@ -90,6 +93,9 @@ class WorkspaceApiController extends Controller
         }
         if ($data['access'] === 'commands' && ! $user->hasEnabledTwoFactorAuthentication()) {
             return response()->json(['errors' => ['access' => ['Running commands needs two-factor authentication on your account.']]], 422);
+        }
+        if ($data['access'] === 'commands' && ($error = $console->confirm($user, $data['code'] ?? null)) !== null) {
+            return response()->json(['errors' => ['code' => [$error]], 'code' => 'console_locked'], 422);
         }
         $count = McpToken::query()->where('workspace_id', $workspace->id)->where('user_id', $user->id)
             ->where('audience', McpToken::API)->active()->count();

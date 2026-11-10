@@ -385,7 +385,7 @@ const focusRing =
                                     {{ field.label }}
                                 </dt>
                                 <dd
-                                    class="min-w-0 font-mono break-all text-(--ds-text-secondary)"
+                                    class="max-h-60 min-w-0 overflow-y-auto font-mono break-all whitespace-pre-wrap text-(--ds-text-secondary)"
                                 >
                                     {{ field.value }}
                                 </dd>

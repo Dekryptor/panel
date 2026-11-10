@@ -91,6 +91,7 @@ test('the first account on a self-hosted install is its verified owner, with a w
         ->and($workspace->billingSummary())->toMatchArray(['plan' => null, 'onTrial' => false, 'selfHosted' => true]);
 
     auth()->logout();
+    config(['serveros.sign_ups' => 'open']);
     $this->post(route('register.store'), [
         'name' => 'Grace Hopper',
         'email' => 'grace@example.com',

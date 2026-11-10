@@ -137,16 +137,16 @@ test('connecting sends you to install the app, and back here once GitHub confirm
 
     Http::fake([
         'github.com/login/oauth/access_token' => Http::response(['access_token' => 'ghu_user']),
-        'api.github.com/user/installations*' => Http::response(['installations' => [['id' => 4242]]]),
-        'api.github.com/app/installations/4242' => Http::response(['account' => ['login' => 'acme', 'type' => 'Organization']]),
+        'api.github.com/app/installations/4242' => Http::response(['account' => ['login' => 'acme', 'type' => 'Organization', 'id' => 9]]),
+        'api.github.com/user/memberships/orgs/acme' => Http::response(['state' => 'active', 'role' => 'admin']),
     ]);
 
     $this->actingAs($workspace->owner)
         ->get('/github/setup?'.http_build_query(['installation_id' => 4242, 'setup_action' => 'install', 'code' => 'abc', 'state' => $state]))
         ->assertRedirect($workspace->url().'/settings/general');
 
-    expect($workspace->githubInstallations()->sole()->only(['installation_id', 'account_login', 'account_type']))
-        ->toBe(['installation_id' => 4242, 'account_login' => 'acme', 'account_type' => 'Organization']);
+    expect($workspace->githubInstallations()->sole()->only(['installation_id', 'account_login', 'account_type', 'repository_ids']))
+        ->toBe(['installation_id' => 4242, 'account_login' => 'acme', 'account_type' => 'Organization', 'repository_ids' => null]);
 });
 
 test('someone else’s installation id, or someone else’s state, connects nothing', function () {
@@ -162,6 +162,84 @@ test('someone else’s installation id, or someone else’s state, connects noth
         ->assertRedirect(route('workspaces.index'));
 
     expect(GitHubInstallation::count())->toBe(0);
+});
+
+function setupWith(Workspace $workspace, int $installation): void
+{
+    $state = Crypt::encryptString(json_encode(['workspace' => $workspace->id, 'user' => $workspace->owner->id, 'at' => now()->getTimestamp()]));
+
+    test()->actingAs($workspace->owner)
+        ->get('/github/setup?'.http_build_query(['installation_id' => $installation, 'code' => 'abc', 'state' => $state]))
+        ->assertRedirect($workspace->url().'/settings/general');
+}
+
+test('an org member who can only read one of its repositories can’t connect its installation', function () {
+    $workspace = Workspace::factory()->create();
+    Http::fake([
+        'github.com/login/oauth/access_token' => Http::response(['access_token' => 'ghu_member']),
+        'api.github.com/app/installations/42' => Http::response(['account' => ['login' => 'victim-org', 'type' => 'Organization', 'id' => 9]]),
+        'api.github.com/user/memberships/orgs/victim-org' => Http::response(['state' => 'active', 'role' => 'member']),
+        'api.github.com/user/installations/42/repositories*' => Http::response(['repositories' => [
+            ['id' => 1, 'permissions' => ['admin' => false, 'push' => false, 'pull' => true]],
+        ]]),
+        'api.github.com/user/installations*' => Http::response(['installations' => [['id' => 42]]]),
+        'api.github.com/app/installations/42/access_tokens' => Http::response(['token' => 'ghs_list'], 201),
+        'api.github.com/installation/repositories*' => Http::response(['repositories' => [['id' => 1], ['id' => 2]]]),
+    ]);
+
+    setupWith($workspace, 42);
+
+    expect(GitHubInstallation::count())->toBe(0);
+});
+
+test('a GitHub user installation only connects for that user', function () {
+    $workspace = Workspace::factory()->create();
+    Http::fake([
+        'github.com/login/oauth/access_token' => Http::response(['access_token' => 'ghu_other']),
+        'api.github.com/app/installations/55' => Http::response(['account' => ['login' => 'liam', 'type' => 'User', 'id' => 31]]),
+        'api.github.com/user' => Http::response(['id' => 99, 'login' => 'collaborator']),
+        'api.github.com/user/installations*' => Http::response(['installations' => [['id' => 55]]]),
+    ]);
+
+    setupWith($workspace, 55);
+
+    expect(GitHubInstallation::count())->toBe(0);
+});
+
+test('an admin of every repository it shares connects it, and gets tokens for just those', function () {
+    $workspace = Workspace::factory()->create();
+    Http::fake([
+        'github.com/login/oauth/access_token' => Http::response(['access_token' => 'ghu_admin']),
+        'api.github.com/app/installations/42' => Http::response(['account' => ['login' => 'acme', 'type' => 'Organization', 'id' => 9]]),
+        'api.github.com/user/memberships/orgs/acme' => Http::response(['message' => 'Resource not accessible by integration'], 403),
+        'api.github.com/user/installations/42/repositories*' => Http::response(['repositories' => [
+            ['id' => 2, 'permissions' => ['admin' => true]],
+            ['id' => 1, 'permissions' => ['admin' => true]],
+        ]]),
+        'api.github.com/app/installations/42/access_tokens' => fn (HttpRequest $r) => match ($r['repositories'][0] ?? null) {
+            'shop' => Http::response(['token' => 'ghs_shop', 'repositories' => [['id' => 1]]], 201),
+            'added-later' => Http::response(['token' => 'ghs_later', 'repositories' => [['id' => 3]]], 201),
+            default => Http::response(['token' => 'ghs_list'], 201),
+        },
+        'api.github.com/installation/repositories*' => Http::response(['repositories' => [['id' => 1], ['id' => 2]]]),
+    ]);
+
+    setupWith($workspace, 42);
+
+    expect($workspace->githubInstallations()->sole()->repository_ids)->toBe([1, 2])
+        ->and(app(GitHubApp::class)->tokenFor($workspace, 'acme', 'shop'))->toBe('ghs_shop')
+        ->and(app(GitHubApp::class)->writeTokenFor($workspace, 'acme', 'added-later'))->toBeNull()
+        ->and(app(GitHubApp::class)->tokenFor($workspace, 'acme', 'added-later'))->toBeNull();
+});
+
+test('a cached token from one workspace’s link isn’t handed to another', function () {
+    [$owner] = connectedWorkspace();
+    $limited = Workspace::factory()->create();
+    $limited->githubInstallations()->create(['installation_id' => 777, 'account_login' => 'acme', 'repository_ids' => [1]]);
+    Http::fake(['api.github.com/app/installations/777/access_tokens' => Http::response(['token' => 'ghs_secret', 'repositories' => [['id' => 2]]], 201)]);
+
+    expect(app(GitHubApp::class)->tokenFor($owner, 'acme', 'secret-app'))->toBe('ghs_secret')
+        ->and(app(GitHubApp::class)->tokenFor($limited, 'acme', 'secret-app'))->toBeNull();
 });
 
 test('the settings page lists connections, and one can be disconnected', function () {
@@ -191,8 +269,8 @@ test('if GitHub comes back without the state, the session still knows the worksp
     $this->actingAs($workspace->owner)->get(workspaceUrl($workspace, '/settings/github/connect'));
     Http::fake([
         'github.com/login/oauth/access_token' => Http::response(['access_token' => 'ghu_user']),
-        'api.github.com/user/installations*' => Http::response(['installations' => [['id' => 55]]]),
-        'api.github.com/app/installations/55' => Http::response(['account' => ['login' => 'liam', 'type' => 'User']]),
+        'api.github.com/app/installations/55' => Http::response(['account' => ['login' => 'liam', 'type' => 'User', 'id' => 31]]),
+        'api.github.com/user' => Http::response(['id' => 31, 'login' => 'liam']),
     ]);
 
     $this->actingAs($workspace->owner)

@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\Audit\AuditContext;
 use App\Support\Audit\Audited;
 use App\Support\Auth\GoogleTeamAccess;
+use App\Support\Auth\SignUps;
 use App\Support\Extensions\Extensions;
 use App\Support\ProviderAvatar;
 use App\Support\TeamPush;
@@ -125,7 +126,7 @@ class SocialLoginController extends Controller
             ->where('provider_id', (string) $account->getId())
             ->first()?->user;
 
-        $existing = $user ?? User::query()->whereRaw('lower(email) = ?', [$email])->first();
+        $existing = $user ?? User::query()->whereRaw('lower(email) = ?', [$email])->orderBy('id')->first();
         foreach (app(Extensions::class)->signInHooks() as $hooks) {
             if (($refused = $hooks->refuseSocialSignIn($request, $existing, $email)) !== null) {
                 return $this->failed($refused);
@@ -133,19 +134,20 @@ class SocialLoginController extends Controller
         }
 
         if ($user === null) {
-            $user = User::query()->whereRaw('lower(email) = ?', [$email])->first();
+            if ($existing !== null && $existing->email_verified_at === null) {
+                return $this->failed('There’s already an account with this email, but its email was never confirmed. Sign in with your password, or reset it, then connect '.$this->label($provider).' from your settings.');
+            }
+            if ($existing === null && ! SignUps::allows($email, $provider === 'google' ? GoogleTeamAccess::verifiedDomain($account) : null)) {
+                return $this->failed(SignUps::CLOSED);
+            }
 
-            $user = DB::transaction(function () use ($user, $account, $provider, $email): User {
-                $user ??= $this->createUser($account, $email);
+            $user = DB::transaction(function () use ($existing, $account, $provider, $email): User {
+                $user = $existing ?? $this->createUser($account, $email);
                 $user->socialAccounts()->create([
                     'provider' => $provider,
                     'provider_id' => (string) $account->getId(),
                     'email' => $email,
                 ]);
-
-                if ($user->email_verified_at === null && Str::lower($user->email) === $email) {
-                    $user->forceFill(['email_verified_at' => now()])->save();
-                }
 
                 return $user;
             });

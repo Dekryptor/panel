@@ -11,7 +11,7 @@ class PruneDeploySources extends Command
 {
     protected $signature = 'deploy-sources:prune';
 
-    protected $description = 'Delete uploaded projects past their expiry';
+    protected $description = 'Delete uploaded projects past their expiry, and uploads that stopped';
 
     public function handle(): int
     {
@@ -30,6 +30,15 @@ class PruneDeploySources extends Command
             $source->delete();
             $pruned++;
         });
+
+        DeploySource::query()
+            ->where('status', 'uploading')
+            ->where('updated_at', '<=', now()->subMinutes(DeploySource::STALLED_MINUTES))
+            ->each(function (DeploySource $source) use (&$pruned) {
+                File::deleteDirectory($source->directory());
+                $source->forceFill(['status' => 'failed'])->save();
+                $pruned++;
+            });
 
         $this->info("Pruned {$pruned} upload(s).");
 

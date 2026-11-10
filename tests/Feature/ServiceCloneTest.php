@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Plan;
+use App\Mcp\Scopes;
 use App\Models\Activity;
 use App\Models\DaemonJob;
 use App\Models\Machine;
@@ -116,4 +117,25 @@ test('clone_service over MCP sends the same job', function () {
 
     expect(mcpCall($workspace, $key, 'clone_service', ['machine' => $machine->id, 'service' => 'docker:aaa111bbb222', 'name' => 'x-copy', 'copy_data' => true])['text'])->toContain('a port, or a domain')
         ->and(mcpCall($workspace, $key, 'clone_service', ['machine' => $machine->id, 'service' => 'docker:aaa111bbb222', 'name' => 'shop-db-1-test', 'port' => 15433, 'copy_data' => true])['text'])->toContain('already called that');
+});
+
+test('a container that reaches Docker on the machine is only cloned over MCP by a connection allowed to run commands', function () {
+    [$workspace, $machine] = cloneMachine();
+    $inventory = $machine->inventory;
+    $inventory['services'][] = ['key' => 'docker:eee555fff666', 'name' => 'portainer', 'kind' => 'app', 'manager' => 'docker', 'status' => 'running', 'ports' => [9443], 'confidence' => 90,
+        'details' => ['managed' => 'true', 'image' => 'portainer/portainer-ce', 'mounts' => '/var/lib/docker/volumes/portainer_data/_data:/data, /var/run/docker.sock:/var/run/docker.sock']];
+    $inventory['services'][] = ['key' => 'docker:ggg777hhh888', 'name' => 'files', 'kind' => 'app', 'manager' => 'docker', 'status' => 'running', 'ports' => [8080], 'confidence' => 90,
+        'details' => ['managed' => 'true', 'image' => 'filebrowser/filebrowser', 'mounts' => '/:/srv']];
+    $machine->forceFill(['inventory' => $inventory])->save();
+    $writeOnly = mcpKey($workspace, scopes: [Scopes::READ, Scopes::WRITE]);
+
+    foreach (['docker:eee555fff666' => 'portainer-copy', 'docker:ggg777hhh888' => 'files-copy'] as $service => $name) {
+        $refused = mcpCall($workspace, $writeOnly, 'clone_service', ['machine' => $machine->id, 'service' => $service, 'name' => $name, 'port' => 19443, 'copy_data' => false]);
+        expect($refused['error'])->toBeTrue()->and($refused['text'])->toContain('Run commands');
+    }
+    expect(DaemonJob::query()->count())->toBe(0);
+
+    expect(mcpCall($workspace, $writeOnly, 'clone_service', ['machine' => $machine->id, 'service' => 'docker:aaa111bbb222', 'name' => 'shop-db-copy', 'port' => 15432, 'copy_data' => true])['error'])->toBeFalse();
+    expect(mcpCall($workspace, mcpKey($workspace), 'clone_service', ['machine' => $machine->id, 'service' => 'docker:eee555fff666', 'name' => 'portainer-copy', 'port' => 19443, 'copy_data' => false])['error'])->toBeFalse()
+        ->and(sentCloneJob()['job'])->toMatchArray(['type' => 'service_clone', 'service' => 'docker:eee555fff666', 'name' => 'portainer-copy']);
 });

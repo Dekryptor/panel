@@ -83,6 +83,7 @@ class StatusSubscriptionController extends Controller
         $page = StatusPage::query()->where('slug', $slug)->with('machine.workspace')->first()
             ?? WorkspaceStatusPage::query()->where('slug', $slug)->with('workspace')->first();
         abort_if($page === null || ! $page->live() || ! $page->public, 404);
+        PublicStatusController::abortUnlessServedHere(request(), $page);
 
         return $page;
     }

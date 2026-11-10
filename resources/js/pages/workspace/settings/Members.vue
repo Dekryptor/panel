@@ -777,6 +777,7 @@ const selectClass =
                             />
                             {{ permission.label }}
                         </label>
+                        <InputError :message="roleForm.errors.permissions" />
                     </fieldset>
                     <div class="flex justify-end gap-2">
                         <AppButton

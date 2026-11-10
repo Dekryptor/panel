@@ -216,12 +216,20 @@ class WorkspaceLogStoreController extends Controller
             throw ValidationException::withMessages(['host' => __('That host doesn’t resolve to a public address.')]);
         }
 
+        $port = (int) $data['port'];
+        $username = trim($data['username']);
+        $password = filled($data['password'] ?? null) ? (string) $data['password'] : null;
+        $sameServer = $store !== null && $host === $store->host && $port === (int) $store->port && $username === $store->username;
+        if ($password === null && ! $sameServer) {
+            throw ValidationException::withMessages(['password' => __('Enter the password again when you change the host, port or user.')]);
+        }
+
         return [
             'host' => $host,
-            'port' => (int) $data['port'],
+            'port' => $port,
             'database' => trim($data['database']),
-            'username' => trim($data['username']),
-            'password' => filled($data['password'] ?? null) ? (string) $data['password'] : (string) $store?->password,
+            'username' => $username,
+            'password' => $password ?? (string) $store->password,
         ];
     }
 }

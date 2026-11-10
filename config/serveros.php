@@ -9,6 +9,8 @@ return [
 
     'edition' => env('SERVEROS_EDITION', 'self-hosted'),
 
+    'sign_ups' => env('SERVEROS_SIGN_UPS', 'closed'),
+
     'brand' => [
         'company' => env('SERVEROS_COMPANY'),
         'address' => env('SERVEROS_COMPANY_ADDRESS'),
@@ -45,6 +47,8 @@ return [
         'code' => env('SERVEROS_PROMO_CODE', 'LAUNCH'),
         'offer' => env('SERVEROS_PROMO_OFFER', '10% off your first plan'),
     ],
+
+    'workflow_outside_emails_per_day' => (int) env('SERVEROS_WORKFLOW_OUTSIDE_EMAILS_PER_DAY', 200),
 
     'legacy_admin_emails' => (string) env('SERVEROS_ADMIN_EMAILS', ''),
 ];

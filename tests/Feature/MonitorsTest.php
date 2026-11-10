@@ -168,7 +168,7 @@ test('a keyword or an exact status can be required', function () {
 });
 
 test('a port is checked by connecting to it', function () {
-    config()->set('monitors.allow_private', true);
+    config()->set(['monitors.allow_private' => true, 'serveros.edition' => 'self-hosted']);
     $workspace = monitorWorkspace();
     $server = stream_socket_server('tcp://127.0.0.1:0');
     $port = (int) substr(strrchr(stream_socket_get_name($server, false), ':'), 1);

@@ -9,6 +9,7 @@ use App\Models\McpToken;
 use App\Models\McpToolCall;
 use App\Models\Workspace;
 use App\Support\Audit\Audited;
+use App\Support\ConsoleLock;
 use App\Support\Docs\DocsUrl;
 use App\Support\Extensions\Extensions;
 use App\Support\Mcp\McpUsage;
@@ -22,7 +23,7 @@ use Inertia\Response;
 
 class WorkspaceMcpController extends Controller
 {
-    public function show(Request $request, Workspace $workspace): Response
+    public function show(Request $request, Workspace $workspace, ConsoleLock $console): Response
     {
         $user = $request->user();
         $seesAll = Gate::allows('manageMembers', $workspace);
@@ -52,6 +53,7 @@ class WorkspaceMcpController extends Controller
             'guideUrl' => DocsUrl::page('guides', 'ai-apps-setup'),
             'termsAccepted' => $user->mcp_terms_accepted_at !== null,
             'twoFactor' => $user->hasEnabledTwoFactorAuthentication(),
+            'consoleUnlocked' => $console->isUnlocked($user),
             'ai' => WorkspaceAiController::props($workspace, Gate::allows('manageSettings', $workspace)),
             'canChange' => $workspace->allows($user, WorkspacePermission::ManageMachines),
             'seesAll' => $seesAll,
@@ -84,12 +86,13 @@ class WorkspaceMcpController extends Controller
     }
 
     #[Audited]
-    public function store(Request $request, Workspace $workspace): JsonResponse
+    public function store(Request $request, Workspace $workspace, ConsoleLock $console): JsonResponse
     {
         $user = $request->user();
         $data = $request->validate([
             'name' => ['required', 'string', 'max:80'],
             'access' => ['required', 'in:read,write,commands'],
+            'code' => ['nullable', 'string', 'max:12'],
         ]);
 
         if ($user->mcp_terms_accepted_at === null) {
@@ -97,6 +100,9 @@ class WorkspaceMcpController extends Controller
         }
         if ($data['access'] === 'commands' && ! $user->hasEnabledTwoFactorAuthentication()) {
             return response()->json(['errors' => ['access' => ['Running commands needs two-factor authentication on your account.']]], 422);
+        }
+        if ($data['access'] === 'commands' && ($error = $console->confirm($user, $data['code'] ?? null)) !== null) {
+            return response()->json(['errors' => ['code' => [$error]], 'code' => 'console_locked'], 422);
         }
         if (McpToken::query()->where('workspace_id', $workspace->id)->where('user_id', $user->id)->where('audience', McpToken::WORKSPACE)->where('kind', 'key')->active()->count() >= 20) {
             return response()->json(['errors' => ['name' => ['You have 20 keys here. Revoke one you no longer use first.']]], 422);

@@ -283,7 +283,6 @@ async function post(url: string, body: Record<string, unknown>): Promise<void> {
             credentials: 'same-origin',
             signal: controller.signal,
             headers: {
-                // JSON first, so a signed-out session gets a 401, not the login page.
                 Accept: 'application/json, application/x-ndjson',
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrf(),

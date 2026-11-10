@@ -16,7 +16,7 @@ function logStorageUrl(Workspace $workspace, string $path = ''): string
 
 function logStorageForm(array $overrides = []): array
 {
-    return ['host' => '203.0.113.10', 'port' => 5432, 'database' => 'logs', 'username' => 'serveros', 'password' => 'hunter2', 'prune' => true, ...$overrides];
+    return ['host' => '93.184.215.10', 'port' => 5432, 'database' => 'logs', 'username' => 'serveros', 'password' => 'hunter2', 'prune' => true, ...$overrides];
 }
 
 beforeEach(fn () => $this->withoutVite());
@@ -149,10 +149,27 @@ test('changing where an enabled store points tests it first', function () {
     $workspace = Workspace::factory()->onPlan(Plan::Business)->create();
     $store = ownLogStore($workspace);
 
-    $this->actingAs($workspace->owner)->put(logStorageUrl($workspace), logStorageForm(['host' => '203.0.113.99']))
+    $this->actingAs($workspace->owner)->put(logStorageUrl($workspace), logStorageForm(['host' => '93.184.215.99']))
         ->assertSessionHasErrors('connection');
 
     expect($store->fresh()->host)->toBe('db.example.com');
+});
+
+test('the saved password is never sent to a different server or user', function () {
+    $workspace = Workspace::factory()->onPlan(Plan::Business)->create();
+    $store = ownLogStore($workspace, ['host' => '93.184.215.10', 'enabled' => false]);
+    $message = 'Enter the password again when you change the host, port or user.';
+
+    foreach ([['host' => '93.184.215.66'], ['port' => 6543], ['username' => 'postgres']] as $change) {
+        $this->actingAs($workspace->owner)->post(logStorageUrl($workspace, '/test'), logStorageForm(['password' => '', ...$change]))
+            ->assertSessionHasErrors(['password' => $message]);
+        $this->actingAs($workspace->owner)->put(logStorageUrl($workspace), logStorageForm(['password' => '', ...$change]))
+            ->assertSessionHasErrors(['password' => $message]);
+    }
+    expect($store->fresh()->host)->toBe('93.184.215.10')->and($store->fresh()->password)->toBe('secret');
+
+    $this->actingAs($workspace->owner)->put(logStorageUrl($workspace), logStorageForm(['host' => '93.184.215.66', 'password' => 'new-one']))->assertSessionHasNoErrors();
+    expect($store->fresh()->host)->toBe('93.184.215.66')->and($store->fresh()->password)->toBe('new-one');
 });
 
 test('members who can’t change settings can’t manage it', function () {

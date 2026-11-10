@@ -2,6 +2,7 @@
 
 namespace App\Support\Machines;
 
+use App\Enums\WorkspacePermission;
 use App\Http\Controllers\MachineUpdatesController;
 use App\Models\Activity;
 use App\Models\DaemonJob;
@@ -283,14 +284,22 @@ final class PackageRollouts
         }
     }
 
+    private function mayAct(PackageRollout $rollout, Machine $machine, User $user): bool
+    {
+        return $machine->workspace_id === $rollout->workspace_id && $rollout->workspace->allows($user, WorkspacePermission::ManageMachines);
+    }
+
     private function start(PackageRolloutMachine $target, PackageRollout $rollout): string
     {
         $machine = $target->machine;
         $user = $rollout->creator;
         $skip = fn (string $why) => $this->settle($target, 'skipped', $why);
 
-        if ($user === null) {
-            return $skip('Whoever started the rollout has left the workspace, so nothing was run.');
+        if ($machine->workspace_id !== $rollout->workspace_id) {
+            return $skip('The machine moved to another workspace.');
+        }
+        if ($user === null || ! $this->mayAct($rollout, $machine, $user)) {
+            return $skip('Whoever started the rollout has left the workspace or can’t manage machines any more, so nothing was run.');
         }
         if (($reason = $this->queue->unavailable($machine)) !== null) {
             return $skip($reason);
@@ -350,6 +359,11 @@ final class PackageRollouts
     private function progress(PackageRolloutMachine $target, PackageRollout $rollout): void
     {
         $machine = $target->machine;
+        if ($machine->workspace_id !== $rollout->workspace_id) {
+            $this->settle($target, 'skipped', 'The machine moved to another workspace.');
+
+            return;
+        }
 
         if ($target->reboot_job_id !== null) {
             $reboot = DaemonJob::query()->find($target->reboot_job_id);
@@ -408,7 +422,7 @@ final class PackageRollouts
             return;
         }
 
-        $reason = $rollout->creator === null ? 'whoever started the rollout has left the workspace' : $this->queue->unavailable($machine);
+        $reason = $rollout->creator === null || ! $this->mayAct($rollout, $machine, $rollout->creator) ? 'whoever started the rollout has left the workspace or can’t manage machines any more' : $this->queue->unavailable($machine);
         if ($reason === null) {
             try {
                 $reboot = $this->queue->queue($machine, $rollout->creator, 'reboot', ['type' => 'reboot'], null, 60);

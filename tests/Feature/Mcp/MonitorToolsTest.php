@@ -5,6 +5,7 @@ use App\Mcp\Scopes;
 use App\Mcp\Tools\MonitorTools;
 use App\Models\Activity;
 use App\Models\Machine;
+use App\Models\McpToolCall;
 use App\Models\Monitor;
 use App\Models\MonitorCheck;
 use App\Models\User;
@@ -241,7 +242,7 @@ test('create_monitor adds a monitor as the dialog does, and checks it straight a
     expect(mcpCall($workspace, $key, 'create_monitor', ['url' => 'https://b.example.com', 'machine' => (string) $theirs->id])['error'])->toBeTrue()
         ->and(Monitor::query()->count())->toBe(1);
 
-    config()->set('monitors.allow_private', true);
+    config()->set(['monitors.allow_private' => true, 'serveros.edition' => 'self-hosted']);
     $server = stream_socket_server('tcp://127.0.0.1:0');
     $port = (int) substr(strrchr(stream_socket_get_name($server, false), ':'), 1);
     $tcp = mcpCall($workspace, $key, 'create_monitor', ['name' => 'Postgres', 'host' => '127.0.0.1', 'port' => $port, 'interval' => 300, 'timeout' => 5, 'alerts' => false]);
@@ -506,4 +507,16 @@ test('send_test_alert posts to the webhook given or the saved one', function () 
         mcpCall($workspace, $key, 'send_test_alert', ['webhook' => 'https://hooks.slack.com/services/T/B/x']);
     }
     expect(mcpCall($workspace, $key, 'send_test_alert', ['webhook' => 'https://hooks.slack.com/services/T/B/x'])['text'])->toContain('That’s a lot of test alerts in a minute.');
+});
+
+test('the call log never keeps an alert webhook address', function () {
+    [$workspace, $key] = monitorToolsSetup();
+    Http::fake();
+
+    mcpCall($workspace, $key, 'update_alert_settings', ['webhook' => 'https://discord.com/api/webhooks/1/token']);
+    mcpCall($workspace, $key, 'send_test_alert', ['webhook' => 'https://hooks.slack.com/services/T/B/x']);
+
+    $logged = McpToolCall::query()->whereIn('tool', ['update_alert_settings', 'send_test_alert'])->pluck('arguments')->all();
+    expect($logged)->toBe([['webhook' => '[hidden]'], ['webhook' => '[hidden]']])
+        ->and(json_encode(McpToolCall::query()->pluck('arguments')))->not->toContain('webhooks/1/token')->not->toContain('T/B/x');
 });

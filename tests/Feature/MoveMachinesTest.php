@@ -1,11 +1,14 @@
 <?php
 
+use App\Enums\WorkspaceRole;
 use App\Models\Activity;
 use App\Models\BackupDestination;
 use App\Models\Machine;
 use App\Models\Monitor;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceStatusPage;
+use App\Support\Auth\GoogleTeamAccess;
 
 test('creating a workspace can move machines in, with their monitors and backups', function () {
     $from = Workspace::factory()->create();
@@ -48,4 +51,45 @@ test('a new workspace takes no more machines than its trial allows', function ()
     $machines = Machine::factory()->for($from)->count(Workspace::TRIAL_PLAN->machineLimit() + 1)->create();
 
     $this->actingAs($from->owner)->post('/workspaces', ['name' => 'Too many', 'machines' => $machines->modelKeys()])->assertSessionHasErrors('machines');
+});
+
+test('only an owner can move a workspace’s machines out of it', function (WorkspaceRole $role) {
+    $from = Workspace::factory()->create();
+    $machine = Machine::factory()->for($from)->create();
+    $user = User::factory()->create();
+    $from->members()->attach($user, ['role' => $role->value]);
+
+    $this->actingAs($user)->getJson('/workspaces/movable-machines')->assertOk()->assertJsonCount(0, 'workspaces');
+    $this->actingAs($user)->post('/workspaces', ['name' => 'Mine', 'machines' => [$machine->id]])->assertSessionHasErrors('machines');
+
+    expect($machine->refresh()->workspace_id)->toBe($from->id)
+        ->and(Workspace::query()->where('name', 'Mine')->exists())->toBeFalse();
+})->with([WorkspaceRole::Admin, WorkspaceRole::Member, WorkspaceRole::Viewer]);
+
+test('moving machines out needs the workspace’s two-factor requirement met', function () {
+    $from = Workspace::factory()->create(['require_two_factor' => true]);
+    $machine = Machine::factory()->for($from)->create();
+
+    $this->actingAs($from->owner)->getJson('/workspaces/movable-machines')->assertOk()->assertJsonCount(0, 'workspaces');
+    $this->actingAs($from->owner)->post('/workspaces', ['name' => 'Mine', 'machines' => [$machine->id]])->assertSessionHasErrors('machines');
+    expect($machine->refresh()->workspace_id)->toBe($from->id);
+
+    $from->owner->forceFill(['two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $this->actingAs($from->owner)->post('/workspaces', ['name' => 'Mine', 'machines' => [$machine->id]])->assertRedirect();
+    expect($machine->refresh()->workspace_id)->not->toBe($from->id);
+});
+
+test('a co-owner has to sign in with Google to move machines out of a workspace that requires it', function () {
+    $from = Workspace::factory()->create(['require_google_sign_in' => true]);
+    $from->emailDomains()->create(['domain' => 'acme.com']);
+    $machine = Machine::factory()->for($from)->create();
+    $coOwner = User::factory()->create(['email' => 'sam@acme.com']);
+    $from->members()->attach($coOwner, ['role' => WorkspaceRole::Owner->value]);
+
+    $this->actingAs($coOwner)->post('/workspaces', ['name' => 'Mine', 'machines' => [$machine->id]])->assertSessionHasErrors('machines');
+    expect($machine->refresh()->workspace_id)->toBe($from->id);
+
+    $this->actingAs($coOwner)->withSession([GoogleTeamAccess::VIA => 'google', GoogleTeamAccess::HD => 'acme.com'])
+        ->post('/workspaces', ['name' => 'Mine', 'machines' => [$machine->id]])->assertRedirect();
+    expect($machine->refresh()->workspace_id)->not->toBe($from->id);
 });

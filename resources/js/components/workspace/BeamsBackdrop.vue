@@ -1,6 +1,4 @@
-<script setup lang="ts">
-// Place it inside a relative, isolated box.
-</script>
+<script setup lang="ts"></script>
 
 <template>
     <div

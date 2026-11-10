@@ -58,47 +58,57 @@ class OAuthTokenController extends Controller
             return $this->fail('invalid_request', 'Send the PKCE code_verifier.');
         }
 
-        $grant = DB::transaction(function () use ($request, $client, $verifier) {
+        $access = McpToken::secret('access');
+        $refresh = McpToken::secret('refresh');
+        $token = DB::transaction(function () use ($request, $client, $verifier, $access, $refresh): ?McpToken {
             $code = McpOAuthCode::query()->lockForUpdate()
                 ->where('code_hash', hash('sha256', (string) $request->input('code', '')))
                 ->first();
+            if ($code === null || $code->mcp_oauth_client_id !== $client->id || ! hash_equals($code->code_challenge, self::challenge($verifier))) {
+                return null;
+            }
+            if ($code->used_at !== null) {
+                if ($code->mcp_token_id !== null) {
+                    McpToken::query()->active()->whereKey($code->mcp_token_id)->get()->each(fn (McpToken $token) => $token->revoke());
+                }
 
-            $valid = $code !== null
-                && $code->used_at === null
-                && $code->expires_at->isFuture()
-                && $code->mcp_oauth_client_id === $client->id
-                && hash_equals($code->redirect_uri, (string) $request->input('redirect_uri', $code->redirect_uri))
-                && hash_equals($code->code_challenge, self::challenge($verifier))
+                return null;
+            }
+
+            $valid = $code->expires_at->isFuture()
+                && hash_equals($code->redirect_uri, (string) $request->input('redirect_uri', $code->redirect_uri_sent ? '' : $code->redirect_uri))
                 && (! $request->filled('resource') || rtrim((string) $request->input('resource'), '/') === rtrim($code->resource, '/'));
             if (! $valid) {
                 return null;
             }
             $code->forceFill(['used_at' => now()])->save();
 
-            return $code;
+            $scopes = self::scopes($code->audience, $code->scopes);
+            if ($scopes === null) {
+                return null;
+            }
+            $token = McpToken::query()->create([
+                'audience' => $code->audience,
+                'workspace_id' => $code->workspace_id,
+                'user_id' => $code->user_id,
+                'mcp_oauth_client_id' => $client->id,
+                'kind' => 'oauth',
+                'name' => $client->name,
+                'scopes' => $scopes,
+                'token_hash' => McpToken::hash($access),
+                'token_prefix' => substr($access, 0, 12),
+                'refresh_hash' => McpToken::hash($refresh),
+                'expires_at' => now()->addMinutes(McpToken::ACCESS_MINUTES),
+                'refresh_expires_at' => now()->addDays(McpToken::REFRESH_DAYS),
+            ]);
+            $code->forceFill(['mcp_token_id' => $token->id])->save();
+
+            return $token;
         });
 
-        $scopes = $grant === null ? null : self::scopes($grant->audience, $grant->scopes);
-        if ($grant === null || $scopes === null) {
+        if ($token === null) {
             return $this->fail('invalid_grant', 'The code is invalid, expired, already used, or doesn’t match this client, redirect or verifier.');
         }
-
-        $access = McpToken::secret('access');
-        $refresh = McpToken::secret('refresh');
-        $token = McpToken::query()->create([
-            'audience' => $grant->audience,
-            'workspace_id' => $grant->workspace_id,
-            'user_id' => $grant->user_id,
-            'mcp_oauth_client_id' => $client->id,
-            'kind' => 'oauth',
-            'name' => $client->name,
-            'scopes' => $scopes,
-            'token_hash' => McpToken::hash($access),
-            'token_prefix' => substr($access, 0, 12),
-            'refresh_hash' => McpToken::hash($refresh),
-            'expires_at' => now()->addMinutes(McpToken::ACCESS_MINUTES),
-            'refresh_expires_at' => now()->addDays(McpToken::REFRESH_DAYS),
-        ]);
 
         return $this->tokens($token, $access, $refresh);
     }
@@ -118,6 +128,11 @@ class OAuthTokenController extends Controller
                 ->where('mcp_oauth_client_id', $client->id)
                 ->first();
             if ($token === null || $token->refresh_expires_at === null || $token->refresh_expires_at->isPast()) {
+                return null;
+            }
+            if ($token->audience === McpToken::WORKSPACE && $token->workspace_id !== null && $token->workspace->roleOf($token->user) === null) {
+                $token->revoke();
+
                 return null;
             }
             $asked = self::scopes($token->audience, (string) $request->input('scope'));

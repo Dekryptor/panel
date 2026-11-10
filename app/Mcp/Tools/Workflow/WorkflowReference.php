@@ -286,7 +286,7 @@ final class WorkflowReference
             'command' => [
                 'machine_id' => $machine(),
                 'service' => $service('A managed container’s key (docker:…; container and managed true in choices), or “@trigger” with a service.down or service.crash_loop trigger.'),
-                'command' => self::rule('string', 'The shell command, up to 2000 characters, placeholders allowed. Runs inside the container, as whoever last saved the workflow, for up to 300 seconds; the step fails (leaves by failed) if the command exits with anything but 0, or the machine reports it failed.', true),
+                'command' => self::rule('string', 'The shell command, up to 2000 characters, placeholders allowed: each reaches the shell as a variable, so this shell never runs a value as a command. Don’t put one inside sh -c, eval or another interpreter’s code, which would. Runs inside the container, as whoever last saved the workflow, for up to 300 seconds; the step fails (leaves by failed) if the command exits with anything but 0, or the machine reports it failed.', true),
             ],
             'agent' => [
                 'machine_id' => $machine(),

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\StaffTwoFactor;
 use Laravel\Pulse\Http\Middleware\Authorize;
 use Laravel\Pulse\Pulse;
 use Laravel\Pulse\Recorders;
@@ -47,6 +48,7 @@ return [
         'web',
         'auth',
         'verified',
+        StaffTwoFactor::class,
         Authorize::class,
     ],
 

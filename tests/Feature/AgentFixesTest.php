@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Plan;
+use App\Enums\WorkspaceRole;
 use App\Jobs\DiagnoseFix;
 use App\Models\Activity;
 use App\Models\AgentFix;
@@ -11,6 +12,7 @@ use App\Models\Workspace;
 use App\Models\WorkspaceAiKey;
 use App\Support\Fixes\FixActions;
 use App\Support\Fixes\FixDiagnoser;
+use App\Support\Fixes\FixRunner;
 use App\Support\Logs\LogStore;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -176,6 +178,40 @@ test('when every step works the fix is done', function () {
         ->and(Activity::query()->pluck('action')->all())->toContain('fix.approve', 'fix.done');
 });
 
+test('the rest of a fix stops when the approver can no longer manage machines', function () {
+    [$workspace, $machine] = fixWorkspace();
+    Http::fake(['127.0.0.1:8090/*' => Http::response(['queued' => true], 202)]);
+    $admin = User::factory()->create(['two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()]);
+    $workspace->members()->attach($admin, ['role' => 'admin']);
+    $fix = AgentFix::query()->create(['workspace_id' => $workspace->id, 'machine_id' => $machine->id, 'state' => 'needs_approval', 'title' => 'x',
+        'actions' => FixActions::clean([
+            ['type' => 'restart', 'service' => 'docker:shop', 'why' => 'a'],
+            ['type' => 'command', 'service' => 'docker:shop', 'command' => 'php artisan migrate --force', 'why' => 'b'],
+        ], $machine)]);
+
+    $this->actingAs($admin)->post(fixUrl($workspace, "/{$fix->id}/approve"))->assertRedirect();
+    $workspace->members()->updateExistingPivot($admin->id, ['role' => 'viewer']);
+    fixJobDone($machine, DaemonJob::query()->sole());
+
+    $fix->refresh();
+    expect($fix->state)->toBe('failed')
+        ->and($fix->results[1]['message'])->toBe('Whoever approved it can’t act on the machine any more.')
+        ->and(DaemonJob::query()->where('agent_fix_id', $fix->id)->count())->toBe(1);
+});
+
+test('approving the same fix twice queues its first step once', function () {
+    [$workspace, $machine] = fixWorkspace();
+    Http::fake(['127.0.0.1:8090/*' => Http::response(['queued' => true], 202)]);
+    $fix = AgentFix::query()->create(['workspace_id' => $workspace->id, 'machine_id' => $machine->id, 'state' => 'needs_approval', 'title' => 'x',
+        'actions' => FixActions::clean([['type' => 'restart', 'service' => 'docker:shop', 'why' => 'x']], $machine)]);
+    $stale = AgentFix::query()->findOrFail($fix->id)->load('machine');
+
+    app(FixRunner::class)->approve($fix->load('machine'), $workspace->owner);
+
+    expect(fn () => app(FixRunner::class)->approve($stale, $workspace->owner))->toThrow(RuntimeException::class, 'isn’t waiting for approval any more')
+        ->and(DaemonJob::query()->count())->toBe(1);
+});
+
 test('approving needs machine rights and two-factor; declining runs nothing; other workspaces can’t see it', function () {
     [$workspace, $machine] = fixWorkspace();
     Http::fake(['127.0.0.1:8090/*' => Http::response(['queued' => true], 202)]);
@@ -266,4 +302,24 @@ test('asking many times at once is slowed down with words, not a 429', function 
         ->assertSessionHasErrors('limit');
     expect(session('errors')->first('limit'))->toStartWith('That’s a lot at once. You can ask again in ')
         ->and(AgentFix::query()->count())->toBe(5);
+});
+
+test('a fix’s command output reaches only people who manage machines', function () {
+    [$workspace, $machine] = fixWorkspace();
+    $viewer = User::factory()->create();
+    $workspace->members()->attach($viewer, ['role' => WorkspaceRole::Viewer->value]);
+    AgentFix::query()->create([
+        'workspace_id' => $workspace->id, 'machine_id' => $machine->id, 'service_key' => 'docker:shop', 'service_name' => 'shop', 'state' => 'fixed',
+        'actions' => [['type' => 'command', 'service' => 'docker:shop', 'command' => 'printenv']],
+        'results' => [['state' => 'succeeded', 'message' => 'Done', 'log' => ['$ printenv', 'DB_PASSWORD=hunter2']]],
+    ]);
+
+    $this->actingAs($viewer)->get(fixUrl($workspace))
+        ->assertDontSee('hunter2')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selected.steps.0.result.state', 'succeeded')
+            ->missing('selected.steps.0.result.log'));
+
+    $this->actingAs($workspace->owner)->get(fixUrl($workspace))
+        ->assertInertia(fn (Assert $page) => $page->where('selected.steps.0.result.log.1', 'DB_PASSWORD=hunter2'));
 });

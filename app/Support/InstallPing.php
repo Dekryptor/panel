@@ -36,7 +36,6 @@ final class InstallPing
         return (string) DB::table('install_identity')->where('id', 1)->value('install_id');
     }
 
-    // Runs when the schedule is defined, so it must not need the database (absent on a first migrate).
     public static function dailyAt(): string
     {
         try {

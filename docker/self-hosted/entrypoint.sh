@@ -71,6 +71,20 @@ daemon_certificates() {
     ISSUED=1
 }
 
+# local_certs: the gateway gets only Caddy's public root, never its data (every private key is there).
+publish_panel_ca() {
+    case "${CADDY_GLOBAL_OPTIONS:-}" in *local_certs*) ;; *) return 0 ;; esac
+    root="${XDG_DATA_HOME:-/data}/caddy/pki/authorities/local/root.crt"
+    (
+        tries=0
+        until [ -f "$root" ] || [ "$tries" -ge 150 ]; do
+            tries=$((tries + 1))
+            sleep 2
+        done
+        [ -f "$root" ] && cp "$root" /gateway/panel-ca.crt.new && mv /gateway/panel-ca.crt.new /gateway/panel-ca.crt
+    ) &
+}
+
 role="${1:-web}"
 case "$role" in
     web)
@@ -81,6 +95,7 @@ case "$role" in
         php artisan storage:link --no-interaction >/dev/null 2>&1 || true
         optimize
         log "ServerOS $(cat VERSION 2>/dev/null || echo dev) is starting on https://${SERVEROS_DOMAIN:-localhost}"
+        publish_panel_ca
         # Not set up yet: the setup code the installer asks for, in the log.
         php artisan install:code --banner --no-interaction >&2 || true
         exec frankenphp run --config /etc/caddy/Caddyfile
@@ -101,8 +116,11 @@ case "$role" in
         exec php artisan schedule:work --no-interaction
         ;;
     gateway)
+        # An older .env points at Caddy's data, which the gateway no longer mounts.
+        case "${GATEWAY_PANEL_CA:-}" in /data/*) GATEWAY_PANEL_CA=/gateway/panel-ca.crt ;; esac
         tries=0
-        until [ -f /gateway/gateway.crt ] && [ -f /gateway/gateway.key ]; do
+        until [ -f /gateway/gateway.crt ] && [ -f /gateway/gateway.key ] \
+            && { [ -z "${GATEWAY_PANEL_CA:-}" ] || [ -f "$GATEWAY_PANEL_CA" ]; }; do
             tries=$((tries + 1))
             if [ "$tries" -ge 90 ]; then
                 log "no gateway certificate in /gateway yet; the web container makes it as it starts"

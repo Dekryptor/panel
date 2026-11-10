@@ -11,7 +11,6 @@ use App\Support\Extensions\Extensions;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(McpCors::class)->group(function () {
-    // Before the workspaces, so "docs" never reaches them.
     Route::domain('docs.'.config('app.domain'))->group(function () {
         Route::post('mcp', DocsMcpController::class)->name('docs.mcp');
         Route::match(['get', 'delete'], 'mcp', [DocsMcpController::class, 'stream']);

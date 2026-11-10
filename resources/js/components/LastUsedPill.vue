@@ -1,6 +1,4 @@
-<script setup lang="ts">
-/* Marks how this browser last signed in, on the sign-in page. */
-</script>
+<script setup lang="ts"></script>
 
 <template>
     <span

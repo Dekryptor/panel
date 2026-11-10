@@ -26,7 +26,6 @@ use Illuminate\Support\Str;
 
 beforeEach(fn () => config()->set('mcp.groups', [MachineTools::class]));
 
-/** Turn on server commands with a gateway that accepts everything. */
 function machineToolsGateway(): void
 {
     config()->set('daemon.commands_enabled', true);
@@ -35,7 +34,6 @@ function machineToolsGateway(): void
     Http::fake(['127.0.0.1:8090/*' => Http::response(['queued' => true], 202)]);
 }
 
-/** An online machine with a scan. */
 function machineToolsMachine(Workspace $workspace, string $name = 'web-1', array $attributes = []): Machine
 {
     $machine = Machine::factory()->for($workspace)->create(['name' => $name, ...$attributes]);
@@ -70,7 +68,6 @@ function machineToolsViewer(Workspace $workspace): string
     return mcpKey($workspace, $viewer);
 }
 
-/** The last thing sent to the gateway. */
 function machineToolsSent(): array
 {
     return collect(Http::recorded())->map(fn ($pair) => $pair[0])->filter(fn ($r) => str_ends_with($r->url(), '/commands'))->map(fn ($r) => $r->data())->values()->all();
@@ -95,21 +92,16 @@ test('tools are listed by what the connection and role allow', function () {
         expect($all[$name]['annotations']['destructiveHint'])->toBeTrue()
             ->and($all[$name]['inputSchema']['required'])->toContain('confirm');
     }
-    // Installing new packages removes nothing, but still asks.
     expect($all['install_packages']['annotations']['destructiveHint'])->toBeFalse()
         ->and($all['install_packages']['inputSchema']['required'])->toContain('confirm');
     expect($all['set_machine_icon']['annotations']['openWorldHint'])->toBeTrue()
         ->and($all['list_machines']['annotations']['readOnlyHint'])->toBeTrue()
         ->and($all['update_machine']['annotations']['readOnlyHint'])->toBeFalse();
 
-    // Read-only: the reading tools, including those an owner's role allows.
-    // Checking for updates runs the package manager on the server, so it
-    // needs a connection that may make changes.
     $read = collect(mcpRequest($workspace, mcpKey($workspace, scopes: [Scopes::READ]), 'tools/list')->json('result.tools'))->pluck('name');
     expect($read->all())->toEqualCanonicalizing(['list_machines', 'get_machine', 'list_machine_groups', 'list_machine_policies', 'rescan_machine', 'get_updates_result', 'get_machine_connection_status', 'get_firewall', 'list_package_updates', 'get_package_rollout'])
         ->and($all['check_updates']['annotations']['readOnlyHint'])->toBeFalse();
 
-    // A viewer: reading only, and not what the dashboard keeps to managers.
     $viewer = collect(mcpRequest($workspace, machineToolsViewer($workspace), 'tools/list')->json('result.tools'))->pluck('name');
     expect($viewer->all())->toEqualCanonicalizing(['list_machines', 'get_machine', 'list_machine_groups', 'list_machine_policies', 'rescan_machine', 'get_updates_result', 'get_firewall', 'list_package_updates', 'get_package_rollout']);
 });
@@ -212,7 +204,6 @@ test('get_machine gives the whole picture, without secrets', function () {
 
     expect($result['text'])->not->toContain('shh-secret')->not->toContain('AKIA-VISIBLE-NOT');
 
-    // Only machines in this workspace.
     $theirs = machineToolsMachine(Workspace::factory()->create(), 'theirs');
     expect(mcpCall($workspace, $key, 'get_machine', ['machine' => (string) $theirs->id]))
         ->error->toBeTrue()
@@ -235,7 +226,6 @@ test('update_machine renames and moves environments like settings, recorded via 
         ->and($rename->meta)->toMatchArray(['from' => 'web-1', 'via' => 'mcp'])
         ->and(Activity::query()->where('action', 'machine.environment')->sole()->meta)->toMatchArray(['to' => 'staging', 'via' => 'mcp']);
 
-    // Nothing new: nothing recorded.
     expect(mcpCall($workspace, $key, 'update_machine', ['machine' => 'api-1', 'environment' => 'staging'])['data']['changed'])->toBeNull()
         ->and(Activity::query()->count())->toBe(2);
 
@@ -244,7 +234,6 @@ test('update_machine renames and moves environments like settings, recorded via 
         ->and(mcpCall($workspace, $key, 'update_machine', ['machine' => 'api-1', 'environment' => 'qa'])['text'])->toContain('Invalid arguments')
         ->and(mcpCall($workspace, $key, 'update_machine', ['machine' => 'api-1', 'name' => str_repeat('a', 256)])['error'])->toBeTrue();
 
-    // Viewers and read-only connections can't.
     expect(mcpCall($workspace, machineToolsViewer($workspace), 'update_machine', ['machine' => 'api-1', 'name' => 'x'])['text'])->toContain('doesn’t allow that')
         ->and(mcpCall($workspace, mcpKey($workspace, scopes: [Scopes::READ]), 'update_machine', ['machine' => 'api-1', 'name' => 'x'])['text'])->toContain('read-only')
         ->and($machine->fresh()->name)->toBe('api-1');
@@ -316,12 +305,10 @@ test('machine groups are created, changed and deleted like the machines page', f
     expect($replaced['data']['group']['machines'])->toBe([])
         ->and(Machine::query()->whereNotNull('machine_group_id')->count())->toBe(0);
     expect(mcpCall($workspace, $key, 'update_machine_group', ['group' => 'Europe'])['text'])->toContain('nothing to change');
-    // Each change is in Activity, as the machines page records them; the same members again records nothing.
     mcpCall($workspace, $key, 'update_machine_group', ['group' => 'Europe', 'machines' => []]);
     expect(Activity::query()->whereIn('action', ['machine_group.create', 'machine_group.update'])->orderBy('id')->get()->map(fn (Activity $a) => [$a->action, $a->subject, $a->meta['via'] ?? null])->all())
         ->toBe([['machine_group.create', 'EU', 'mcp'], ['machine_group.update', 'Europe', 'mcp'], ['machine_group.update', 'Europe', 'mcp']]);
 
-    // Other workspaces' machines and groups aren't reachable.
     $theirs = machineToolsMachine(Workspace::factory()->create(), 'theirs');
     $foreign = MachineGroup::query()->forceCreate(['workspace_id' => $theirs->workspace_id, 'name' => 'Theirs']);
     expect(mcpCall($workspace, $key, 'create_machine_group', ['name' => 'X', 'machines' => [(string) $theirs->id]])['text'])->toContain('No machine')
@@ -330,7 +317,6 @@ test('machine groups are created, changed and deleted like the machines page', f
         ->and($foreign->fresh()->name)->toBe('Theirs')
         ->and(MachineGroup::query()->where('name', 'X')->exists())->toBeFalse();
 
-    // Deleting needs the name typed.
     $db->forceFill(['machine_group_id' => $eu->id])->save();
     expect(mcpCall($workspace, $key, 'delete_machine_group', ['group' => 'Europe'])['text'])->toContain('confirm')
         ->and(mcpCall($workspace, $key, 'delete_machine_group', ['group' => 'Europe', 'confirm' => 'europe'])['text'])->toContain('doesn’t match')
@@ -383,7 +369,6 @@ test('maintenance planned and called off through MCP reads as done through MCP',
 
     expect(mcpCall($workspace, $key, 'end_maintenance', ['machine' => 'web-1', 'planned' => $id])['data']['calledOff'])->toBeTrue()
         ->and(Activity::query()->where('action', 'machine.maintenance_cancelled')->sole()->meta)->toMatchArray(['via' => 'mcp']);
-    // Already called off: nothing more happened, so nothing more is recorded.
     expect(mcpCall($workspace, $key, 'end_maintenance', ['machine' => 'web-1', 'planned' => $id])['data']['calledOff'])->toBeFalse()
         ->and(Activity::query()->where('action', 'machine.maintenance_cancelled')->count())->toBe(1);
 });
@@ -408,12 +393,10 @@ test('reboot_machine needs the name typed and holds alerts while it restarts', f
         ->and($machine->maintenance_public)->toBeFalse()
         ->and(Activity::query()->where('action', 'machine.reboot')->sole()->meta)->toMatchArray(['via' => 'mcp']);
 
-    // A window already set is kept.
     $machine->forceFill(['maintenance_until' => now()->addHours(2), 'maintenance_reason' => 'Planned'])->save();
     mcpCall($workspace, $key, 'reboot_machine', ['machine' => 'web-1', 'confirm' => 'web-1']);
     expect($machine->fresh()->maintenance_reason)->toBe('Planned');
 
-    // Offline machines can't take it.
     $machine->forceFill(['last_seen_at' => now()->subHour(), 'maintenance_until' => null])->save();
     expect(mcpCall($workspace, $key, 'reboot_machine', ['machine' => 'web-1', 'confirm' => 'web-1'])['text'])->toContain('offline')
         ->and(Activity::query()->where('action', 'machine.reboot')->count())->toBe(2)
@@ -450,19 +433,16 @@ test('checking for updates and reading the result', function () {
             ->and($result['data']['report']['packages'][0])->toBe(['name' => 'openssl', 'from' => '3.0.13-0ubuntu3.4', 'to' => '3.0.13-0ubuntu3.5', 'security' => true]);
     }
 
-    // Jobs of other machines, other kinds, and nonsense ids aren't found.
     $other = machineToolsMachine($workspace, 'db-1');
     $deploy = DaemonJob::query()->forceCreate(['id' => (string) Str::uuid(), 'machine_id' => $machine->id, 'kind' => 'deploy', 'state' => 'queued']);
     expect(mcpCall($workspace, $key, 'get_updates_result', ['machine' => 'db-1', 'job' => $jobId])['text'])->toContain('No updates job')
         ->and(mcpCall($workspace, $key, 'get_updates_result', ['machine' => 'web-1', 'job' => $deploy->id])['error'])->toBeTrue()
         ->and(mcpCall($workspace, $key, 'get_updates_result', ['machine' => 'web-1', 'job' => 'nope'])['text'])->toContain('Invalid arguments');
 
-    // Viewers can follow a job, but not start a check.
     $viewer = machineToolsViewer($workspace);
     expect(mcpCall($workspace, $viewer, 'get_updates_result', ['machine' => 'web-1'])['error'])->toBeFalse()
         ->and(mcpCall($workspace, $viewer, 'check_updates', ['machine' => 'web-1'])['text'])->toContain('doesn’t allow that');
 
-    // Commands off: said plainly.
     config()->set('daemon.commands_enabled', false);
     expect(mcpCall($workspace, $key, 'check_updates', ['machine' => $other->id])['text'])->toContain('isn’t turned on');
 });
@@ -481,12 +461,11 @@ test('install_updates confirms, installs one batch at a time, and is recorded', 
         ->and(machineToolsSent()[0]['command']['timeout_secs'])->toBe(1800)
         ->and(Activity::query()->where('action', 'machine.update')->sole()->meta)->toMatchArray(['security_only' => true, 'packages' => null, 'via' => 'mcp']);
 
-    // One install at a time.
     expect(mcpCall($workspace, $key, 'install_updates', ['machine' => 'web-1', 'confirm' => 'web-1'])['text'])->toContain('already being installed');
     DaemonJob::query()->update(['state' => 'succeeded']);
 
-    // Picking packages: checked names, and a daemon that can.
     expect(mcpCall($workspace, $key, 'install_updates', ['machine' => 'web-1', 'confirm' => 'web-1', 'packages' => ['--reinstall']])['text'])->toContain('can’t start with a dash');
+    expect(mcpCall($workspace, $key, 'install_updates', ['machine' => 'web-1', 'confirm' => 'web-1', 'packages' => ['openssh-server-']])['text'])->toContain('can’t end with a dash');
     $picked = mcpCall($workspace, $key, 'install_updates', ['machine' => 'web-1', 'confirm' => 'web-1', 'security_only' => true, 'packages' => ['openssl', 'libc6:amd64', 'openssl']]);
     expect($picked['data']['kind'])->toBe('package_install')
         ->and(machineToolsSent()[1]['command']['job'])->toBe(['type' => 'package_install', 'packages' => ['openssl', 'libc6:amd64']])
@@ -506,7 +485,6 @@ test('install_packages confirms, sends a package_add job of its own, and needs a
     expect(mcpCall($workspace, $key, 'install_packages', ['machine' => 'web-1', 'packages' => ['git']])['text'])->toContain('confirm')
         ->and(DaemonJob::query()->count())->toBe(0);
 
-    // Nothing that reads as an option, or as apt's "remove this".
     expect(mcpCall($workspace, $key, 'install_packages', ['machine' => 'web-1', 'confirm' => 'web-1', 'packages' => ['-y']])['text'])->toContain('can’t start with a dash')
         ->and(mcpCall($workspace, $key, 'install_packages', ['machine' => 'web-1', 'confirm' => 'web-1', 'packages' => ['nginx-']])['text'])->toContain('can’t end with a dash')
         ->and(mcpCall($workspace, $key, 'install_packages', ['machine' => 'web-1', 'confirm' => 'web-1', 'packages' => array_map(fn ($i) => "pkg{$i}", range(1, 21))])['error'])->toBeTrue();
@@ -517,12 +495,10 @@ test('install_packages confirms, sends a package_add job of its own, and needs a
         ->and(machineToolsSent()[0]['command']['job'])->toBe(['type' => 'package_add', 'packages' => ['git', 'unzip']])
         ->and(Activity::query()->where('action', 'machine.packages_add')->sole()->meta)->toMatchArray(['packages' => ['git', 'unzip'], 'via' => 'mcp']);
 
-    // One install at a time, with updates too.
     expect(mcpCall($workspace, $key, 'install_packages', ['machine' => 'web-1', 'confirm' => 'web-1', 'packages' => ['curl']])['text'])->toContain('already being installed')
         ->and(mcpCall($workspace, $key, 'install_updates', ['machine' => 'web-1', 'confirm' => 'web-1'])['text'])->toContain('already being installed');
     DaemonJob::query()->update(['state' => 'succeeded']);
 
-    // An older daemon would refuse the job: said before it's sent.
     $machine->forceFill(['daemon_version' => 'v0.1.1-pre.34'])->save();
     expect(mcpCall($workspace, $key, 'install_packages', ['machine' => 'web-1', 'confirm' => 'web-1', 'packages' => ['git']])['text'])->toContain('too old');
 
@@ -600,7 +576,6 @@ test('add_machine gives a one-time install command and its status can be followe
     $enrolment->forceFill(['machine_id' => null, 'used_at' => null, 'expires_at' => now()->subMinute()])->save();
     expect($status()['state'])->toBe('expired');
 
-    // Not someone else's, not for viewers.
     $foreign = DaemonEnrolment::query()->create(['workspace_id' => Workspace::factory()->create()->id, 'token_hash' => str_repeat('a', 64), 'expires_at' => now()->addMinutes(15)]);
     expect(mcpCall($workspace, $key, 'get_machine_connection_status', ['enrolment' => $foreign->id])['text'])->toContain('No machine connection')
         ->and(mcpCall($workspace, machineToolsViewer($workspace), 'add_machine')['text'])->toContain('doesn’t allow that')
@@ -614,14 +589,12 @@ test('add_machine keeps to the plan’s machine limit', function () {
     $workspace = Workspace::factory()->trialExpired()->create();
     $key = mcpKey($workspace);
 
-    // With no plan, AI apps get no tool calls at all.
     expect(mcpCall($workspace, $key, 'add_machine')['text'])->toContain('has no plan, so AI apps can')
         ->and(DaemonEnrolment::query()->count())->toBe(0);
 
     $workspace->forceFill(['plan' => Plan::Pro, 'machine_limit_override' => 1])->save();
     expect(mcpCall($workspace, $key, 'add_machine')['error'])->toBeFalse();
 
-    // One waiting to connect, someone else's, counts.
     $teammate = User::factory()->create();
     $workspace->members()->attach($teammate, ['role' => 'admin']);
     DaemonEnrolment::query()->update(['user_id' => $teammate->id]);
@@ -682,18 +655,15 @@ test('server work keeps to the pace the dashboard allows', function () {
         ->and(DaemonJob::query()->where('kind', 'reboot')->count())->toBe(3)
         ->and(Activity::query()->where('action', 'machine.reboot')->count())->toBe(3);
 
-    // Per person: someone else in the workspace still can.
     $admin = User::factory()->create();
     $workspace->members()->attach($admin, ['role' => 'admin']);
     expect(mcpCall($workspace, mcpKey($workspace, $admin), 'reboot_machine', ['machine' => 'web-1', 'confirm' => 'web-1'])['error'])->toBeFalse();
 
-    // A mistyped confirm doesn't use one up.
     foreach (range(1, 5) as $i) {
         mcpCall($workspace, $key, 'install_updates', ['machine' => 'web-1', 'confirm' => 'nope']);
     }
     expect(mcpCall($workspace, $key, 'install_updates', ['machine' => 'web-1', 'confirm' => 'web-1'])['error'])->toBeFalse();
 
-    // A minute on, with the install finished, the person can reboot again.
     $this->travel(61)->seconds();
     $machine->forceFill(['last_seen_at' => now()])->save();
     DaemonJob::query()->whereIn('kind', ['package_updates', 'package_install'])->update(['state' => 'succeeded']);
@@ -789,16 +759,13 @@ test('a disk scan says what\'s using the disk and what\'s safe to clear', functi
         ->and(array_column($result['data']['suggestions'], 'command'))->toBe(['journalctl --vacuum-size=200M', 'docker system prune -a', 'apt-get clean', null])
         ->and($result['data']['suggestions'][1]['detail'])->toStartWith('Images: 1.371GB.')
         ->and($result['data']['suggestions'][3]['title'])->toStartWith('Postgres data takes')
-        // Only one machine's scan is its own.
         ->and(mcpCall($workspace, $key, 'get_disk_usage', ['machine' => machineToolsMachine($workspace, 'db-1')->id, 'job' => $scan['data']['jobId']])['text'])->toContain('No disk scan');
 
-    // A scan of one folder, and paths that aren't allowed.
     mcpCall($workspace, $key, 'get_disk_usage', ['machine' => 'web-1', 'path' => '/var/lib']);
     expect(machineToolsSent()[1]['command']['job'])->toBe(['type' => 'disk_usage', 'path' => '/var/lib'])
         ->and(mcpCall($workspace, $key, 'get_disk_usage', ['machine' => 'web-1', 'path' => '/var/../etc'])['text'])->toContain('Invalid arguments')
         ->and(mcpCall($workspace, $key, 'get_disk_usage', ['machine' => 'web-1', 'path' => 'var'])['text'])->toContain('Invalid arguments');
 
-    // An older daemon can't scan.
     $machine->forceFill(['daemon_version' => 'v0.1.1-pre.18'])->save();
     expect(mcpCall($workspace, $key, 'get_disk_usage', ['machine' => 'web-1'])['text'])->toContain('too old');
 });

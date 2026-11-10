@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Auth\SocialLoginController;
 use App\Models\Activity;
+use App\Models\McpToken;
 use App\Models\Workspace;
 use App\Support\Audit\AuditContext;
 use App\Support\Audit\Audited;
@@ -64,6 +65,9 @@ class WorkspaceGoogleSignInController extends Controller
             }
             $choice = null;
         }
+        if ($choice !== null && $data['mode'] !== 'off' && ! $workspace->canGrant($request->user(), $choice->permissions())) {
+            throw ValidationException::withMessages(['role' => 'You can’t give a role with more access than your own.']);
+        }
 
         $workspace->forceFill(['domain_join' => $data['mode']]);
         if ($choice !== null) {
@@ -121,6 +125,14 @@ class WorkspaceGoogleSignInController extends Controller
         }
 
         $workspace->forceFill(['require_google_sign_in' => (bool) $require])->save();
+        if ($require) {
+            McpToken::query()->active()
+                ->where('workspace_id', $workspace->id)
+                ->where('kind', 'oauth')
+                ->where('user_id', '!=', $workspace->owner_id)
+                ->get()
+                ->each(fn (McpToken $token) => $token->revoke());
+        }
         Activity::record($workspace, $require ? 'sign_in.require_google_on' : 'sign_in.require_google_off');
         Inertia::flash('toast', ['type' => 'success', 'message' => $require
             ? 'Google sign-in is now required.'

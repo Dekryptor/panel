@@ -14,6 +14,7 @@ use App\Models\Workspace;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
 
 beforeEach(function () {
     config()->set('daemon.commands_enabled', true);
@@ -174,6 +175,29 @@ test('settings make and revoke API keys, separately from MCP keys', function () 
     $workspace->members()->attach($viewer, ['role' => 'viewer']);
     $this->actingAs($viewer)->postJson($url('/keys'), ['name' => 'x', 'access' => 'write'])->assertUnprocessable();
     $this->actingAs($viewer)->postJson($url('/keys'), ['name' => 'x', 'access' => 'read'])->assertCreated();
+});
+
+test('a key that runs commands needs a fresh two-factor code, like the console', function () {
+    [$workspace] = apiWorkspace();
+    $owner = $workspace->owner;
+    $owner->forceFill(['two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $provider = Mockery::mock(TwoFactorAuthenticationProvider::class);
+    $provider->shouldReceive('verify')->andReturnUsing(fn ($secret, $code) => $code === '123456');
+    app()->instance(TwoFactorAuthenticationProvider::class, $provider);
+    $url = 'https://'.$workspace->host().'/settings/api/keys';
+    $before = McpToken::query()->count();
+
+    $this->actingAs($owner)->get('https://'.$workspace->host().'/settings/api')->assertInertia(fn ($page) => $page->where('consoleUnlocked', false));
+    $this->actingAs($owner)->postJson($url, ['name' => 'Shell', 'access' => 'commands'])
+        ->assertUnprocessable()->assertJsonValidationErrors('code')->assertJson(['code' => 'console_locked']);
+    $this->actingAs($owner)->postJson($url, ['name' => 'Shell', 'access' => 'commands', 'code' => '000000'])
+        ->assertUnprocessable()->assertJsonValidationErrors('code');
+    expect(McpToken::query()->count())->toBe($before);
+
+    $this->actingAs($owner)->postJson($url, ['name' => 'Shell', 'access' => 'commands', 'code' => '123456'])
+        ->assertCreated()->assertJsonPath('scopes', Scopes::ALL);
+    $this->actingAs($owner)->postJson($url, ['name' => 'Shell 2', 'access' => 'commands'])->assertCreated();
+    $this->actingAs($owner)->postJson($url, ['name' => 'Writer', 'access' => 'write'])->assertCreated();
 });
 
 test('a provisioning script gets a one-time token for each new server, for as long as it asks', function () {

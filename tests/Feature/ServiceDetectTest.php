@@ -1,5 +1,7 @@
 <?php
 
+use App\Mcp\ToolError;
+use App\Mcp\Tools\Deploy\RefResolver;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\ServiceTemplates\RepositoryDetector;
@@ -86,6 +88,34 @@ test('only public GitHub links are accepted', function () {
         ->postJson(detectUrl($workspace), ['repository' => 'https://github.com/acme/missing'])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('repository');
+});
+
+test('the panel’s own GitHub token only ever reads public repositories', function () {
+    config()->set('services.github.token', 'ghp_operator');
+    $sha = str_repeat('b', 40);
+    Http::fake([
+        'api.github.com/repos/operator/secret' => Http::response(['default_branch' => 'main', 'private' => true, 'visibility' => 'private']),
+        'api.github.com/repos/acme/app' => Http::response(['default_branch' => 'main', 'private' => false, 'visibility' => 'public']),
+        'api.github.com/repos/*/commits/*' => Http::response(['sha' => $sha]),
+        'api.github.com/repos/*/git/trees/*' => Http::response(['tree' => []]),
+        '*' => Http::response(null, 404),
+    ]);
+    $workspace = Workspace::factory()->create();
+
+    $this->actingAs($workspace->owner)
+        ->postJson(detectUrl($workspace), ['repository' => 'https://github.com/operator/secret'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('repository');
+    expect(fn () => app(RefResolver::class)->resolve('https://github.com/operator/secret', 'main', $workspace))->toThrow(ToolError::class)
+        ->and(fn () => app(RefResolver::class)->resolve('https://github.com/operator/secret', null, $workspace))->toThrow(ToolError::class);
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'operator/secret/'));
+
+    $this->actingAs($workspace->owner)
+        ->postJson(detectUrl($workspace), ['repository' => 'https://github.com/acme/app'])
+        ->assertOk()
+        ->assertJson(['commit' => $sha]);
+    expect(app(RefResolver::class)->resolve('https://github.com/acme/app', 'main', $workspace))->toBe(['commit' => $sha, 'ref' => 'main']);
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'acme/app/commits/main') && $request->hasHeader('Authorization', 'Bearer ghp_operator'));
 });
 
 test('viewers cannot detect repositories', function () {

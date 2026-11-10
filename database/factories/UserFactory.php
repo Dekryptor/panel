@@ -30,6 +30,19 @@ class UserFactory extends Factory
         ];
     }
 
+    public function configure(): static
+    {
+        return $this->afterMaking(function (User $user): void {
+            if ($user->is_admin && $user->two_factor_confirmed_at === null) {
+                $user->forceFill([
+                    'two_factor_secret' => encrypt('secret'),
+                    'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
+                    'two_factor_confirmed_at' => now(),
+                ]);
+            }
+        });
+    }
+
     public function unverified(): static
     {
         return $this->state(fn (array $attributes) => [

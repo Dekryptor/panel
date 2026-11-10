@@ -41,7 +41,7 @@ class WorkspaceController extends Controller
                 $request->validated('name'),
             );
 
-            return [$workspace, $machines->isEmpty() ? [] : $moveMachines->move($machines, $workspace)];
+            return [$workspace, $machines->isEmpty() ? [] : $moveMachines->move($machines, $workspace, $request->user())];
         });
 
         $moved = $machines->count();
@@ -57,7 +57,7 @@ class WorkspaceController extends Controller
         return response()->json([
             'trial' => CreateWorkspace::getsTrial($request->user()),
             'limit' => self::moveLimit($request->user()),
-            'workspaces' => MovableMachines::for($request->user())
+            'workspaces' => MovableMachines::for($request->user(), $request)
                 ->groupBy('workspace_id')
                 ->map(fn ($machines) => [
                     'name' => $machines->first()->workspace->name,

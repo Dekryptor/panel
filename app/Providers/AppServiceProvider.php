@@ -101,7 +101,7 @@ class AppServiceProvider extends ServiceProvider
             }
         });
 
-        Gate::define('viewAdmin', fn (User $user): bool => $user->is_admin && $user->email_verified_at !== null);
+        Gate::define('viewAdmin', fn (User $user): bool => $user->is_admin && $user->email_verified_at !== null && $user->two_factor_confirmed_at !== null);
         Gate::define('viewPulse', fn (User $user): bool => Gate::forUser($user)->allows('viewAdmin'));
 
         RateLimiter::for('docs-assistant', fn (Request $request) => [
@@ -112,6 +112,16 @@ class AppServiceProvider extends ServiceProvider
 
     protected function configureAccountEmails(): void
     {
+        VerifyEmail::createUrlUsing(function (User $notifiable): string {
+            $url = clone app('url');
+            $url->forceRootUrl((string) config('app.url'));
+
+            return $url->temporarySignedRoute('verification.verify', now()->addMinutes((int) config('auth.verification.expire', 60)), [
+                'id' => $notifiable->getKey(),
+                'hash' => sha1($notifiable->getEmailForVerification()),
+            ]);
+        });
+
         VerifyEmail::toMailUsing(fn (object $notifiable, string $url) => BrandMail::apply((new MailMessage)
             ->subject('Confirm your email for ServerOS')
             ->line('One click and your workspace is ready.')
@@ -125,7 +135,7 @@ class AppServiceProvider extends ServiceProvider
 
         ResetPassword::toMailUsing(function (object $notifiable, string $token) {
             $email = method_exists($notifiable, 'getEmailForPasswordReset') ? $notifiable->getEmailForPasswordReset() : '';
-            $url = url(route('password.reset', ['token' => $token, 'email' => $email], false));
+            $url = rtrim((string) config('app.url'), '/').route('password.reset', ['token' => $token, 'email' => $email], false);
             $expires = self::minutes((int) config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60));
 
             return BrandMail::apply((new MailMessage)

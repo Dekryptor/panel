@@ -4,7 +4,6 @@
     $dots = ['good' => '#34D399', 'warn' => '#FBBF24', 'bad' => '#F87171', 'neutral' => '#7C8BA8'];
     $tones = ['good' => '#6EE7B7', 'warn' => '#FCD34D', 'bad' => '#FCA5A5', 'mono' => '#8A8A96'];
 
-    // Gmail's apps invert dark emails: flat gradient fills and the g-screen/g-diff blend layers undo it.
     $fill = fn (string $hex) => "background-color:{$hex}; background-image:linear-gradient({$hex},{$hex});";
     $text = fn (string $html) => '<div class="g-screen"><div class="g-diff">'.$html.'</div></div>';
 @endphp

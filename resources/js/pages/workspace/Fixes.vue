@@ -810,7 +810,7 @@ const field =
                                     </div>
                                     <code
                                         v-if="s.command"
-                                        class="mt-2.5 block overflow-x-auto rounded-lg bg-(--ds-hover) px-3 py-2 font-ui-mono text-[12.5px]/5 whitespace-pre"
+                                        class="mt-2.5 block rounded-lg bg-(--ds-hover) px-3 py-2 font-ui-mono text-[12.5px]/5 break-all whitespace-pre-wrap"
                                         >$ {{ s.command }}</code
                                     >
                                     <p

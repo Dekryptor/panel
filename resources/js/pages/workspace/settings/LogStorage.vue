@@ -61,6 +61,17 @@ const form = useForm({
 
 const editable = computed(() => props.canManage && props.planAllows);
 
+const keepsPassword = computed(
+    () =>
+        !!props.store?.hasPassword &&
+        form.host
+            .trim()
+            .replace(/^\[|\]$/g, '')
+            .toLowerCase() === props.store.host &&
+        Number(form.port) === props.store.port &&
+        form.username.trim() === props.store.username,
+);
+
 function save(): void {
     form.put('/settings/log-storage', {
         preserveScroll: true,
@@ -364,9 +375,13 @@ async function copyIp(): Promise<void> {
                     <SettingsLine
                         :label="$t('Password')"
                         :hint="
-                            store?.hasPassword
+                            keepsPassword
                                 ? $t('Saved. Leave it blank to keep it.')
-                                : undefined
+                                : store?.hasPassword
+                                  ? $t(
+                                        'Enter it again for a new host, port or user.',
+                                    )
+                                  : undefined
                         "
                         input-id="log-password"
                     >
@@ -377,7 +392,7 @@ async function copyIp(): Promise<void> {
                             class="max-w-md"
                             autocomplete="new-password"
                             maxlength="200"
-                            :placeholder="store?.hasPassword ? '••••••••' : ''"
+                            :placeholder="keepsPassword ? '••••••••' : ''"
                         />
                         <InputError :message="form.errors.password" />
                     </SettingsLine>

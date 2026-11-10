@@ -9,7 +9,6 @@ use Illuminate\Http\Request;
 use Laravel\Fortify\Contracts\LogoutResponse;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController as FortifyAuthenticatedSessionController;
 
-// Not Laravel's logout(): it replaces the remember token and signs out every other device.
 class AuthenticatedSessionController extends FortifyAuthenticatedSessionController
 {
     public function destroy(Request $request): LogoutResponse

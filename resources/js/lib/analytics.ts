@@ -1,4 +1,5 @@
 import type { PostHog } from 'posthog-js';
+import { scrubEvent, scrubRequest } from '@/lib/analyticsPrivacy';
 import { CONSENT_EVENT, hasConsent } from '@/lib/consent';
 import type { Consent } from '@/lib/consent';
 
@@ -26,7 +27,15 @@ async function start(): Promise<PostHog | null> {
             capture_pageleave: true,
             enable_heatmaps: true,
             person_profiles: 'identified_only',
-            session_recording: { maskAllInputs: true },
+            mask_all_text: source === 'panel',
+            mask_all_element_attributes: source === 'panel',
+            before_send: (event) => scrubEvent(event),
+            session_recording: {
+                maskAllInputs: true,
+                maskTextSelector: source === 'panel' ? '*' : null,
+                maskCapturedNetworkRequestFn: (request) =>
+                    scrubRequest(request),
+            },
         });
         posthog.register({ app: source });
         client = posthog;

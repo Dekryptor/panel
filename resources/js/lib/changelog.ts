@@ -27,7 +27,6 @@ export function changelogDate(iso: string | null): string {
               day: 'numeric',
               month: 'long',
               year: 'numeric',
-              // A fixed zone, so the server and the browser render the same date.
               timeZone: 'Europe/London',
           })
         : '';

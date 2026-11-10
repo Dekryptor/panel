@@ -55,6 +55,7 @@ class MachineController extends Controller
         $range = array_key_exists((string) $request->query('range'), self::RANGES)
             ? (string) $request->query('range')
             : '24h';
+        $seesConsole = Gate::allows('manageMachines', $workspace);
 
         return Inertia::render('workspace/MachineShow', [
             'workspace' => $workspace->toPageProps(),
@@ -92,23 +93,27 @@ class MachineController extends Controller
                 ->latest()
                 ->limit(20)
                 ->get()
-                ->map(fn ($job) => [
-                    'id' => $job->id,
-                    'kind' => $job->kind,
-                    'service' => $job->service,
-                    'command' => $job->kind === 'service_exec' ? ($job->command['job']['command'] ?? null) : null,
-                    'state' => $job->state,
-                    'phase' => $job->phase,
-                    'progress' => $job->progress,
-                    'log' => $job->log ?? [],
-                    'result' => $job->result,
-                    'error' => $job->error,
-                    'explanation' => DeployFailure::explain($job),
-                    'createdAt' => $job->created_at?->toIso8601String(),
-                    'updatedAt' => $job->updated_at?->toIso8601String(),
-                    'retryable' => $job->isRetryable(),
-                    'stale' => $job->isStale(),
-                ]),
+                ->map(function (DaemonJob $job) use ($seesConsole) {
+                    $hidden = $job->kind === 'service_exec' && ! $seesConsole;
+
+                    return [
+                        'id' => $job->id,
+                        'kind' => $job->kind,
+                        'service' => $job->service,
+                        'command' => $job->kind === 'service_exec' && ! $hidden ? ($job->command['job']['command'] ?? null) : null,
+                        'state' => $job->state,
+                        'phase' => $job->phase,
+                        'progress' => $job->progress,
+                        'log' => $hidden ? [] : ($job->log ?? []),
+                        'result' => $hidden ? null : $job->result,
+                        'error' => $job->error,
+                        'explanation' => DeployFailure::explain($job),
+                        'createdAt' => $job->created_at?->toIso8601String(),
+                        'updatedAt' => $job->updated_at?->toIso8601String(),
+                        'retryable' => $job->isRetryable(),
+                        'stale' => $job->isStale(),
+                    ];
+                }),
             'files' => fn () => [
                 'places' => FileJobs::places($machine),
                 'maxWrite' => FileJobs::MAX_WRITE_BYTES,

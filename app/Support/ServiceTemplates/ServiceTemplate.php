@@ -93,6 +93,17 @@ final readonly class ServiceTemplate
         return $this->kind === self::KIND_APP;
     }
 
+    public function controlsHost(): bool
+    {
+        foreach ([...$this->files, (string) $this->dockerfile] as $content) {
+            if (str_contains($content, 'docker.sock') || preg_match('/^\s*privileged:\s*true/mi', $content) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** @return array<string, mixed> */
     public function toPageProps(?Machine $machine = null): array
     {

@@ -22,7 +22,9 @@ class RequireWorkspaceTwoFactor
             return $next($request);
         }
 
-        $message = "{$workspace->name} requires two-factor sign-in. Set up an authenticator app or a passkey to continue.";
+        $message = $user->passkeys()->exists()
+            ? "{$workspace->name} requires two-factor sign-in. Sign out and back in with your passkey, or set up an authenticator app."
+            : "{$workspace->name} requires two-factor sign-in. Set up an authenticator app or a passkey to continue.";
 
         if ($request->expectsJson() && ! $request->header('X-Inertia')) {
             return response()->json(['message' => $message], 403);

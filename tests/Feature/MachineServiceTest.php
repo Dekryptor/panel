@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\WorkspaceRole;
 use App\Models\Activity;
 use App\Models\DaemonJob;
 use App\Models\DaemonRelease;
@@ -277,4 +278,32 @@ test('a job an MCP call queues carries the call, to the daemon and back to the c
     expect($call->call_id)->not->toBeNull()
         ->and($job->mcp_call_id)->toBe($call->call_id)
         ->and($sent)->toMatchArray(['kind' => 'user', 'via' => 'mcp', 'tool' => 'restart_service', 'call' => $call->call_id]);
+});
+
+test('console commands and their output reach only people who manage machines', function () {
+    [$workspace, $machine, $url] = serviceMachine();
+    $viewer = User::factory()->create();
+    $workspace->members()->attach($viewer, ['role' => WorkspaceRole::Viewer->value]);
+    DaemonJob::query()->create([
+        'id' => (string) Str::uuid(), 'machine_id' => $machine->id, 'user_id' => $workspace->owner_id, 'kind' => 'service_exec', 'service' => 'docker:abc123def456', 'state' => 'succeeded',
+        'command' => ['job' => ['type' => 'service_exec', 'service' => 'docker:abc123def456', 'command' => 'cat .env']],
+        'log' => ['$ cat .env', 'SECRET=hunter2'], 'result' => ['exit_code' => 0, 'stdout' => 'SECRET=hunter2'],
+    ]);
+    $machinePage = 'https://'.$workspace->host().'/machines/'.$machine->id;
+
+    foreach ([$machinePage, $url.'docker:abc123def456'] as $page) {
+        $this->actingAs($viewer)->get($page)
+            ->assertDontSee('hunter2')
+            ->assertInertia(fn (Assert $p) => $p
+                ->where('jobs.0.kind', 'service_exec')
+                ->where('jobs.0.state', 'succeeded')
+                ->where('jobs.0.command', null)
+                ->where('jobs.0.log', [])
+                ->where('jobs.0.result', null));
+
+        $this->actingAs($workspace->owner)->get($page)
+            ->assertInertia(fn (Assert $p) => $p
+                ->where('jobs.0.command', 'cat .env')
+                ->where('jobs.0.result.stdout', 'SECRET=hunter2'));
+    }
 });

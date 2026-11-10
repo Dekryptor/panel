@@ -93,3 +93,45 @@ test('viewers cannot upload', function () {
         ->postJson('https://'.$workspace->host()."/machines/{$machine->id}/sources", ['filename' => 'a.zip', 'size' => 10])
         ->assertForbidden();
 });
+
+test('a workspace can only upload so much in a day', function () {
+    $workspace = Workspace::factory()->create();
+    $machine = Machine::factory()->for($workspace)->create();
+    $base = 'https://'.$workspace->host()."/machines/{$machine->id}/sources";
+    $this->actingAs($workspace->owner);
+
+    foreach (range(1, 5) as $i) {
+        $this->postJson($base, ['filename' => 'a.zip', 'size' => DeploySource::MAX_BYTES])->assertCreated();
+    }
+    $this->postJson($base, ['filename' => 'a.zip', 'size' => 1])->assertUnprocessable()->assertJsonValidationErrors('size');
+
+    $other = Workspace::factory()->create(['owner_id' => $workspace->owner_id]);
+    $otherMachine = Machine::factory()->for($other)->create();
+    $this->postJson('https://'.$other->host()."/machines/{$otherMachine->id}/sources", ['filename' => 'a.zip', 'size' => 1])
+        ->assertUnprocessable()->assertJsonValidationErrors('size');
+
+    DeploySource::query()->update(['created_at' => now()->subHours(DeploySource::KEEP_HOURS + 1)]);
+    $this->postJson($base, ['filename' => 'a.zip', 'size' => DeploySource::MAX_BYTES])->assertCreated();
+
+    DeploySource::query()->get()->each(fn (DeploySource $source) => File::deleteDirectory($source->directory()));
+});
+
+test('uploads that stop are cleared within the hour', function () {
+    $workspace = Workspace::factory()->create();
+    $machine = Machine::factory()->for($workspace)->create();
+    $this->actingAs($workspace->owner)
+        ->postJson('https://'.$workspace->host()."/machines/{$machine->id}/sources", ['filename' => 'a.zip', 'size' => 10])
+        ->assertCreated();
+    $stalled = DeploySource::query()->sole();
+    file_put_contents($stalled->zipPath(), 'part');
+
+    $this->artisan('deploy-sources:prune')->assertSuccessful();
+    expect($stalled->fresh()->status)->toBe('uploading')
+        ->and(file_exists($stalled->zipPath()))->toBeTrue();
+
+    DeploySource::query()->update(['updated_at' => now()->subMinutes(DeploySource::STALLED_MINUTES + 1)]);
+    $this->artisan('deploy-sources:prune')->assertSuccessful();
+
+    expect($stalled->fresh()->status)->toBe('failed')
+        ->and(is_dir($stalled->directory()))->toBeFalse();
+});

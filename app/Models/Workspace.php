@@ -8,6 +8,8 @@ use App\Enums\Limit;
 use App\Enums\Plan;
 use App\Enums\WorkspacePermission;
 use App\Enums\WorkspaceRole;
+use App\Support\Admin\Impersonation;
+use App\Support\Auth\GoogleTeamAccess;
 use App\Support\Domains\CustomDomains;
 use App\Support\Edition;
 use App\Support\Entitlements\Entitlements;
@@ -179,7 +181,12 @@ class Workspace extends Model
 
     public function satisfiesTwoFactor(User $user, ?Request $request = null): bool
     {
-        if (! $this->require_two_factor || $user->two_factor_confirmed_at !== null || $user->passkeys()->exists()) {
+        if (! $this->require_two_factor || $user->two_factor_confirmed_at !== null) {
+            return true;
+        }
+
+        if ($user->passkeys()->exists() && ($request === null || ! $request->hasSession() || Impersonation::active($request)
+            || $request->session()->get(GoogleTeamAccess::VIA) === 'passkey')) {
             return true;
         }
 
@@ -326,6 +333,36 @@ class Workspace extends Model
         }
 
         return $access['role']?->can($permission) ?? false;
+    }
+
+    /** @return list<WorkspacePermission> */
+    public static function permissionsFor(WorkspaceRole $role, ?WorkspaceCustomRole $custom = null): array
+    {
+        $access = ['role' => $role, 'custom' => $custom];
+
+        return array_values(array_filter(WorkspacePermission::cases(), fn (WorkspacePermission $p) => self::grants($access, $p)));
+    }
+
+    /** @return list<WorkspacePermission> */
+    public function permissionsOf(User $user): array
+    {
+        $access = $this->accessOf($user);
+
+        return $access['role'] === null ? [] : self::permissionsFor($access['role'], $access['custom']);
+    }
+
+    /** @param  list<WorkspacePermission>  $permissions */
+    public function canGrant(User $actor, array $permissions): bool
+    {
+        $held = $this->permissionsOf($actor);
+
+        foreach ($permissions as $permission) {
+            if (in_array($permission, WorkspacePermission::offered(), true) && ! in_array($permission, $held, true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function hasStaffRoles(): bool

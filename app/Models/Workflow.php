@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\WorkflowGraph;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -40,7 +41,7 @@ class Workflow extends Model
     {
         return [
             'enabled' => 'boolean',
-            'graph' => 'array',
+            'graph' => WorkflowGraph::class,
             'webhook_token' => 'encrypted',
             'next_run_at' => 'datetime',
             'last_run_at' => 'datetime',

@@ -55,8 +55,7 @@ final class InstallPackages extends Tool
         $data = $this->validate($arguments, [
             'machine' => ['required', ServerWork::reference()],
             'packages' => ['required', 'array', 'list', 'min:1', 'max:'.self::MAX],
-            // No leading dash (an option) or trailing one (apt reads "nginx-" as remove nginx).
-            'packages.*' => ['string', 'max:200', 'regex:'.PackageUpdates::NAME_PATTERN, 'not_regex:/-$/'],
+            'packages.*' => ['string', 'max:200', 'not_regex:/-$/', 'regex:'.PackageUpdates::NAME_PATTERN],
             'confirm' => ['nullable', 'string', 'max:200'],
             'wait' => ServerWork::waitRules(),
         ], [

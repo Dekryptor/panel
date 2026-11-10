@@ -100,6 +100,11 @@ final class DeployTemplate extends Tool
         if ($template === null) {
             throw new ToolError("No template “{$args['template']}”. list_templates shows them.");
         }
+        if ($template->controlsHost() && ! $context->allows(Scopes::COMMANDS)) {
+            throw new ToolError($context->via === 'assistant'
+                ? "{$template->name} controls Docker on the machine, which is root access, and Ask AI never deploys that. Tell the person to deploy it from the dashboard."
+                : "{$template->name} controls Docker on the machine, which is root access, so deploying it needs a connection allowed to run commands. Reconnect and allow “Run commands” (it needs two-factor authentication), or deploy it from the dashboard.");
+        }
 
         $this->refuseWhatDoesNotApply($template, $args);
         $env = $this->env($template, $args['env'] ?? []);

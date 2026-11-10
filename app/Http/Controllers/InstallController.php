@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -327,7 +328,7 @@ class InstallController extends Controller
         $owner = $validator->validated();
         $request->session()->put('install.owner', [
             'name' => $owner['name'],
-            'email' => $owner['email'],
+            'email' => Str::lower(trim($owner['email'])),
             'workspace' => $owner['workspace'],
             'slug' => $slugs->generate($owner['workspace'], $owner['email']),
             'password' => bcrypt($owner['password']),
@@ -344,7 +345,7 @@ class InstallController extends Controller
 
         /** @var array{name: string, email: string, workspace: string, slug: string, password: string} $owner */
         $owner = $request->session()->get('install.owner');
-        if (User::query()->where('email', $owner['email'])->exists()) {
+        if (User::query()->whereRaw('lower(email) = ?', [Str::lower($owner['email'])])->exists()) {
             return redirect('/install?step=owner')->withErrors(['email' => 'There’s an account with that email already.']);
         }
 

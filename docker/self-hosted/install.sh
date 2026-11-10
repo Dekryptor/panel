@@ -168,6 +168,11 @@ fi
 docker run --rm --entrypoint cat "$IMAGE" /app/docker/self-hosted/compose.yaml > compose.yaml
 docker run --rm --entrypoint cat "$IMAGE" /app/docker/self-hosted/serveros-panel > /usr/local/bin/serveros-panel
 chmod 755 /usr/local/bin/serveros-panel
+# Only a compose file that gives Redis the password can have one.
+if grep -q requirepass compose.yaml && ! grep -q '^REDIS_PASSWORD=.' .env; then
+    sed -i '/^REDIS_PASSWORD=/d' .env
+    printf 'REDIS_PASSWORD=%s\n' "$(random 24)" >> .env
+fi
 
 say "Starting ServerOS"
 docker compose up -d --remove-orphans

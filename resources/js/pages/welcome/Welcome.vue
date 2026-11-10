@@ -807,8 +807,6 @@ onBeforeUnmount(() =>
                                 appButtonClasses(
                                     'primary',
                                     'md',
-                                    // Looks disabled until every question has an
-                                    // answer, but still takes the press, to shake.
                                     'h-9 w-full justify-center aria-disabled:pointer-events-auto! aria-disabled:cursor-default! aria-disabled:active:scale-100!',
                                 )
                             "

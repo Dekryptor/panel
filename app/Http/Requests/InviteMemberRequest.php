@@ -68,9 +68,11 @@ class InviteMemberRequest extends FormRequest
 
                 if ($this->chosenRole()->isStaffRole() && ! $workspace->hasStaffRoles()) {
                     $validator->errors()->add('role', 'Member and Viewer roles are on Pro and Business. Invite them as an Admin, or upgrade.');
+                } elseif (! $workspace->canGrant($this->user(), Workspace::permissionsFor($this->chosenRole(), $this->chosenCustomRole()))) {
+                    $validator->errors()->add('role', 'You can’t give a role with more access than your own.');
                 }
 
-                if ($workspace->members()->where('email', $this->input('email'))->exists()) {
+                if ($workspace->members()->whereRaw('lower(users.email) = ?', [$this->input('email')])->exists()) {
                     $validator->errors()->add('email', 'They’re already in this workspace.');
                 }
             },

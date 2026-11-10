@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasStatusBranding;
+use App\Support\Domains\CustomDomains;
 use App\Support\Machines\MachinePolicies;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -41,6 +42,19 @@ class StatusPage extends Model
     public const UPTIME_DAYS = 90;
 
     protected $guarded = ['id', 'machine_id', 'uptime'];
+
+    protected static function booted(): void
+    {
+        static::updated(function (StatusPage $page) {
+            if ($page->wasChanged('slug')) {
+                WorkspaceDomain::query()
+                    ->where('workspace_id', Machine::query()->whereKey($page->machine_id)->value('workspace_id'))
+                    ->where('status_page_slug', $page->getOriginal('slug'))
+                    ->update(['status_page_slug' => $page->slug]);
+                CustomDomains::forget();
+            }
+        });
+    }
 
     /**
      * @return array<string, string>

@@ -55,7 +55,6 @@ class Activity extends Model
         ];
     }
 
-    // Never throws: the log must not break the action it records.
     /** @param  array<string, mixed>  $meta */
     public static function record(Workspace|int $workspace, string $action, ?string $subject = null, ?Machine $machine = null, ?User $user = null, array $meta = [], ?int $viewAs = null): void
     {

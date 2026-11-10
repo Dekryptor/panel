@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Plan;
 use App\Enums\WorkspaceRole;
 use App\Http\Controllers\Mcp\OAuthTokenController;
 use App\Mcp\Scopes;
@@ -12,9 +13,12 @@ use App\Models\McpToolCall;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Activity\ActivityLine;
+use App\Support\Auth\GoogleTeamAccess;
 use App\Support\Mcp\OAuth;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
+use Laravel\Passkeys\Passkey;
 
 beforeEach(fn () => config()->set('mcp.groups', [WorkspaceTools::class]));
 
@@ -108,8 +112,6 @@ test('the whole flow: consent, code with PKCE, MCP access, refresh rotation, rev
     $tokens = $this->post('/oauth/token', ['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $client->client_id, 'redirect_uri' => $client->redirect_uris[0], 'code_verifier' => $verifier])
         ->assertOk()->assertHeader('Cache-Control')->json();
     expect($tokens['token_type'])->toBe('Bearer')->and($tokens['scope'])->toBe('workspace:read workspace:write');
-    $this->postJson('/oauth/token', ['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $client->client_id, 'redirect_uri' => $client->redirect_uris[0], 'code_verifier' => $verifier])
-        ->assertStatus(400);
 
     $result = mcpCall($workspace, $tokens['access_token'], 'get_workspace');
     expect($result['data']['connection']['name'])->toBe('Claude')
@@ -276,4 +278,152 @@ test('a revoke from the app is its own doing, and a token for a package’s audi
         ->and($gone->source)->toBe('api')
         ->and($gone->ip)->toBeNull()
         ->and(ActivityLine::sentence($gone))->toBe('Claude disconnected itself from MCP (Sam’s connection)');
+});
+
+test('connecting an app over MCP to a workspace that requires two-factor needs a passkey sign-in, not just a passkey', function () {
+    $workspace = Workspace::factory()->create(['require_two_factor' => true]);
+    $owner = $workspace->owner;
+    Passkey::query()->forceCreate(['user_id' => $owner->id, 'name' => 'Laptop', 'credential_id' => 'abc', 'credential' => []]);
+    $client = oauthClient();
+    [, $challenge] = pkce();
+
+    $this->withSession([GoogleTeamAccess::VIA => 'password']);
+    $nonce = authorizeRequest($owner, $client, $challenge);
+    $this->actingAs($owner)->post('/oauth/authorize', ['request' => $nonce, 'decision' => 'approve', 'workspace' => $workspace->id])
+        ->assertSessionHasErrors('workspace');
+    expect(McpOAuthCode::query()->count())->toBe(0);
+
+    $this->withSession([GoogleTeamAccess::VIA => 'passkey']);
+    approve($owner, authorizeRequest($owner, $client, $challenge), ['workspace' => $workspace->id]);
+    expect(McpOAuthCode::query()->count())->toBe(1);
+});
+
+test('a self-registered app’s broken request shows our error page instead of sending you to it', function () {
+    $workspace = Workspace::factory()->create();
+    $client = oauthClient(['https://evil.example/landing'], 'Anything');
+    [, $challenge] = pkce();
+
+    foreach ([
+        ['response_type' => 'token'],
+        ['response_type' => 'code'],
+        ['response_type' => 'code', 'code_challenge' => $challenge, 'code_challenge_method' => 'S256', 'resource' => 'https://elsewhere.example/mcp'],
+    ] as $query) {
+        $this->actingAs($workspace->owner)->get('/oauth/authorize?'.http_build_query(['client_id' => $client->client_id, 'redirect_uri' => 'https://evil.example/landing', 'state' => 's', ...$query]))
+            ->assertOk()->assertInertia(fn (Assert $page) => $page->has('problem'));
+    }
+});
+
+test('using a code a second time revokes the access it gave', function () {
+    $workspace = Workspace::factory()->create();
+    $client = oauthClient();
+    [$verifier, $challenge] = pkce();
+    $code = approve($workspace->owner, authorizeRequest($workspace->owner, $client, $challenge, ['resource' => OAuth::resource($workspace)]));
+    $exchange = ['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $client->client_id, 'redirect_uri' => $client->redirect_uris[0], 'code_verifier' => $verifier];
+
+    $tokens = $this->postJson('/oauth/token', $exchange)->assertOk()->json();
+    mcpRequest($workspace, $tokens['access_token'], 'ping')->assertOk();
+
+    $this->postJson('/oauth/token', $exchange)->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+    mcpRequest($workspace, $tokens['access_token'], 'ping')->assertUnauthorized();
+    $this->postJson('/oauth/token', ['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token'], 'client_id' => $client->client_id])->assertStatus(400);
+});
+
+test('the token endpoint wants the redirect_uri back when the app sent one to authorize', function () {
+    $workspace = Workspace::factory()->create();
+    $client = oauthClient();
+    [$verifier, $challenge] = pkce();
+    $exchange = fn (string $code) => ['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $client->client_id, 'code_verifier' => $verifier];
+
+    $sent = approve($workspace->owner, authorizeRequest($workspace->owner, $client, $challenge, ['resource' => OAuth::resource($workspace)]));
+    $this->postJson('/oauth/token', $exchange($sent))->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+    $this->postJson('/oauth/token', [...$exchange($sent), 'redirect_uri' => $client->redirect_uris[0]])->assertOk();
+
+    $left = approve($workspace->owner, authorizeRequest($workspace->owner, $client, $challenge, ['resource' => OAuth::resource($workspace), 'redirect_uri' => null]));
+    $this->postJson('/oauth/token', $exchange($left))->assertOk();
+});
+
+test('a workspace that needs Google sign-in can’t be connected from a password session', function () {
+    $workspace = Workspace::factory()->onPlan(Plan::Pro)->create(['name' => 'Acme']);
+    $workspace->forceFill(['require_google_sign_in' => true])->save();
+    $workspace->emailDomains()->create(['domain' => 'acme.com'])->forceFill(['verified_at' => now()])->save();
+    $sam = User::factory()->create(['email' => 'sam@acme.com']);
+    $workspace->members()->attach($sam, ['role' => 'admin']);
+    $own = Workspace::factory()->for($sam, 'owner')->create(['name' => 'Side project']);
+    $own->members()->syncWithoutDetaching([$sam->id => ['role' => WorkspaceRole::Owner->value]]);
+    $client = oauthClient();
+    [, $challenge] = pkce();
+    $query = fn (array $extra = []) => '/oauth/authorize?'.http_build_query(['client_id' => $client->client_id, 'response_type' => 'code', 'code_challenge' => $challenge, 'code_challenge_method' => 'S256', 'state' => 'xyz', ...$extra]);
+
+    $this->actingAs($sam)->withSession([GoogleTeamAccess::VIA => 'password'])->get($query(['resource' => OAuth::resource($workspace)]))
+        ->assertOk()->assertInertia(fn (Assert $page) => $page->where('problem', fn (string $problem) => str_contains($problem, 'sign in with Google')));
+
+    $nonce = null;
+    $this->actingAs($sam)->withSession([GoogleTeamAccess::VIA => 'password'])->get($query())
+        ->assertInertia(function (Assert $page) use (&$nonce, $own) {
+            $page->has('workspaces', 1)->where('workspaces.0.id', $own->id);
+            $nonce = $page->toArray()['props']['request'];
+        });
+    $this->actingAs($sam)->post('/oauth/authorize', ['request' => $nonce, 'decision' => 'approve', 'workspace' => $workspace->id, 'write' => true])
+        ->assertSessionHasErrors('workspace');
+    expect(McpOAuthCode::query()->exists())->toBeFalse();
+
+    $this->actingAs($sam)->withSession([GoogleTeamAccess::VIA => 'google', GoogleTeamAccess::HD => 'acme.com'])->get($query(['resource' => OAuth::resource($workspace)]))
+        ->assertOk()->assertInertia(fn (Assert $page) => $page->missing('problem')->where('workspaces.0.id', $workspace->id));
+});
+
+test('turning on Google sign-in disconnects members’ AI apps, but not the owner’s', function () {
+    $workspace = Workspace::factory()->onPlan(Plan::Pro)->create();
+    $workspace->emailDomains()->create(['domain' => 'acme.com'])->forceFill(['verified_at' => now()])->save();
+    $sam = User::factory()->create();
+    $workspace->members()->attach($sam, ['role' => 'admin']);
+    $client = oauthClient();
+    $connect = fn (User $user) => McpToken::query()->create([
+        'workspace_id' => $workspace->id, 'user_id' => $user->id, 'mcp_oauth_client_id' => $client->id, 'kind' => 'oauth', 'name' => 'Claude',
+        'scopes' => Scopes::ALL, 'token_hash' => McpToken::hash(Str::random()), 'token_prefix' => 'soa_x', 'expires_at' => now()->addHour(),
+    ]);
+    $samApp = $connect($sam);
+    $ownerApp = $connect($workspace->owner);
+    [$samKey] = McpToken::issueKey($workspace, $sam, 'Laptop', Scopes::ALL);
+
+    $this->actingAs($workspace->owner)->put('https://'.$workspace->host().'/settings/require-google', ['require' => true])->assertSessionHasNoErrors();
+
+    expect($samApp->fresh()->revoked_at)->not->toBeNull()
+        ->and($ownerApp->fresh()->revoked_at)->toBeNull()
+        ->and($samKey->fresh()->revoked_at)->toBeNull();
+});
+
+test('allowing an app to run commands needs a fresh two-factor code', function () {
+    $workspace = Workspace::factory()->create();
+    $owner = $workspace->owner;
+    $owner->forceFill(['two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()])->save();
+    $provider = Mockery::mock(TwoFactorAuthenticationProvider::class);
+    $provider->shouldReceive('verify')->andReturnUsing(fn ($secret, $code) => $code === '123456');
+    app()->instance(TwoFactorAuthenticationProvider::class, $provider);
+    $client = oauthClient();
+    [, $challenge] = pkce();
+    $choices = ['workspace' => $workspace->id, 'write' => true, 'commands' => true];
+
+    $this->actingAs($owner)->post('/oauth/authorize', ['request' => authorizeRequest($owner, $client, $challenge), 'decision' => 'approve', ...$choices])
+        ->assertSessionHasErrors('commands');
+    $this->actingAs($owner)->post('/oauth/authorize', ['request' => authorizeRequest($owner, $client, $challenge), 'decision' => 'approve', ...$choices, 'code' => '000000'])
+        ->assertSessionHasErrors('commands');
+    expect(McpOAuthCode::query()->exists())->toBeFalse();
+
+    approve($owner, authorizeRequest($owner, $client, $challenge), [...$choices, 'code' => '123456']);
+    expect(McpOAuthCode::query()->sole()->scopes)->toBe(Scopes::ALL);
+});
+
+test('someone removed from a workspace can’t keep their app connection alive', function () {
+    $workspace = Workspace::factory()->create();
+    $sam = User::factory()->create();
+    $workspace->members()->attach($sam, ['role' => 'admin']);
+    $client = oauthClient();
+    [$verifier, $challenge] = pkce();
+    $code = approve($sam, authorizeRequest($sam, $client, $challenge, ['resource' => OAuth::resource($workspace)]));
+    $tokens = $this->postJson('/oauth/token', ['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $client->client_id, 'redirect_uri' => $client->redirect_uris[0], 'code_verifier' => $verifier])->assertOk()->json();
+
+    $workspace->members()->detach($sam->id);
+
+    $this->postJson('/oauth/token', ['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token'], 'client_id' => $client->client_id])->assertStatus(400);
+    expect(McpToken::query()->sole()->revoked_at)->not->toBeNull();
 });

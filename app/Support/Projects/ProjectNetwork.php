@@ -22,7 +22,9 @@ class ProjectNetwork
 
     public function sync(Project $project, User $user): void
     {
-        $machines = $project->nodes()->pluck('machine_id')->unique()->values();
+        $machines = $project->nodes()
+            ->whereHas('machine', fn ($query) => $query->where('workspace_id', $project->workspace_id))
+            ->pluck('machine_id')->unique()->values();
 
         foreach ($project->members()->whereNotIn('machine_id', $machines)->with('machine')->get() as $gone) {
             $this->leave($gone, $user);
@@ -91,7 +93,9 @@ class ProjectNetwork
     public function spec(ProjectMachine $member): array
     {
         $project = $member->project;
-        $others = $project->members()->whereKeyNot($member->id)->with('machine')->get();
+        $others = $project->members()->whereKeyNot($member->id)
+            ->whereHas('machine', fn ($query) => $query->where('workspace_id', $project->workspace_id))
+            ->with('machine')->get();
 
         return [
             'type' => 'network',
@@ -171,6 +175,9 @@ class ProjectNetwork
     private function send(ProjectMachine $member, User $user): void
     {
         $machine = $member->machine;
+        if ($machine->workspace_id !== $member->project->workspace_id) {
+            return;
+        }
         if ($this->queue->unavailable($machine) !== null) {
             $member->forceFill(['state' => $member->public_key === null ? 'offline' : $member->state])->save();
 
@@ -184,20 +191,26 @@ class ProjectNetwork
         }
     }
 
+    public function release(Machine $machine, string $network, User $user): void
+    {
+        if ($this->queue->unavailable($machine) !== null) {
+            return;
+        }
+
+        try {
+            $this->queue->queue($machine, $user, 'network', [
+                'type' => 'network',
+                'network' => $network,
+                'action' => 'down',
+            ], null, 120);
+        } catch (RuntimeException $e) {
+            report($e);
+        }
+    }
+
     private function leave(ProjectMachine $member, User $user): void
     {
-        $machine = $member->machine;
-        if ($this->queue->unavailable($machine) === null) {
-            try {
-                $this->queue->queue($machine, $user, 'network', [
-                    'type' => 'network',
-                    'network' => $member->project->uid,
-                    'action' => 'down',
-                ], null, 120);
-            } catch (RuntimeException $e) {
-                report($e);
-            }
-        }
+        $this->release($member->machine, $member->project->uid, $user);
         $member->delete();
     }
 

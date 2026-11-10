@@ -32,6 +32,10 @@ class DeploySource extends Model
 
     public const KEEP_HOURS = 24;
 
+    public const DAILY_BYTES = 5 * self::MAX_BYTES;
+
+    public const STALLED_MINUTES = 60;
+
     protected function casts(): array
     {
         return ['detection' => 'array', 'expires_at' => 'datetime'];

@@ -95,6 +95,8 @@ test('read-only connections only see read tools, and calls are logged with secre
 
     expect(McpServer::redact(['env' => ['A' => 'secret'], 'name' => 'web', 'nested' => ['password' => 'x']]))
         ->toBe(['env' => '[hidden]', 'name' => 'web', 'nested' => ['password' => '[hidden]']]);
+    expect(McpServer::redact(['repo' => 'https://bot:ghp_secret@github.com/you/app.git', 'url' => 'https://example.com/a@b']))
+        ->toBe(['repo' => 'https://[hidden]@github.com/you/app.git', 'url' => 'https://example.com/a@b']);
 });
 
 test('each connection is rate limited', function () {

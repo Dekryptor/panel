@@ -53,6 +53,7 @@ class MachineServiceController extends Controller
         $range = array_key_exists((string) $request->query('range'), self::RANGES)
             ? (string) $request->query('range')
             : '1h';
+        $seesConsole = Gate::allows('manageMachines', $workspace);
 
         return Inertia::render('workspace/ServiceShow', [
             'workspace' => $workspace->toPageProps(),
@@ -81,17 +82,21 @@ class MachineServiceController extends Controller
                 ->latest()
                 ->limit(30)
                 ->get()
-                ->map(fn (DaemonJob $job) => [
-                    'id' => $job->id,
-                    'kind' => $job->kind,
-                    'action' => $job->command['job']['action'] ?? null,
-                    'command' => $job->command['job']['command'] ?? null,
-                    'state' => $job->state,
-                    'log' => $job->log ?? [],
-                    'result' => $job->result,
-                    'error' => $job->error,
-                    'createdAt' => $job->created_at?->toIso8601String(),
-                ]),
+                ->map(function (DaemonJob $job) use ($seesConsole) {
+                    $hidden = $job->kind === 'service_exec' && ! $seesConsole;
+
+                    return [
+                        'id' => $job->id,
+                        'kind' => $job->kind,
+                        'action' => $job->command['job']['action'] ?? null,
+                        'command' => $hidden ? null : ($job->command['job']['command'] ?? null),
+                        'state' => $job->state,
+                        'log' => $hidden ? [] : ($job->log ?? []),
+                        'result' => $hidden ? null : $job->result,
+                        'error' => $job->error,
+                        'createdAt' => $job->created_at?->toIso8601String(),
+                    ];
+                }),
             'app' => ($deploy = AppVersionController::lastDeploy($machine, $found['name'] ?? null)) === null ? null : [
                 'service' => $deploy->service,
                 'commit' => $deploy->command['job']['commit'] ?? null,

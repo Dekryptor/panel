@@ -116,6 +116,14 @@ test('a push releases the pushed commit where the app runs', function () {
         ->and($run->steps['r']['message'])->toBe('Released aaaaaaa');
 });
 
+test('a link limited to some repositories only hears pushes to those', function () {
+    [$workspace] = releaseFlow();
+    $workspace->githubInstallations()->update(['repository_ids' => json_encode([5])]);
+
+    push(['repository' => ['id' => 6]])->assertJson(['started' => 0]);
+    push(['repository' => ['id' => 5]])->assertJson(['started' => 1]);
+});
+
 test('pushes need a good signature and only start workflows on that repository and branch', function () {
     releaseFlow();
 

@@ -3,14 +3,17 @@
 use App\Enums\Plan;
 use App\Models\DaemonJob;
 use App\Models\Machine;
+use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowRun;
 use App\Models\Workspace;
+use App\Models\WorkspaceAiKey;
 use App\Notifications\MonitorAlert;
 use App\Support\Workflows\AgentSpec;
 use App\Support\Workflows\WorkflowEngine;
 use App\Support\Workflows\WorkflowSteps;
 use App\Support\Workflows\WorkflowTemplates;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
@@ -89,7 +92,7 @@ function agentJobDone(Machine $machine, DaemonJob $job, array $log, int $exit = 
     ], ['X-Gateway-Secret' => 'test-gateway-secret'])->assertOk();
 }
 
-test('an agent step runs in its container with the prompt, the repo and a write token, all handed in by name', function () {
+test('an agent step runs in its container with the prompt, the repo and a read-only token, all handed in by name', function () {
     [$workspace, $machine] = agentWorkspace();
     $workflow = agentFlow($workspace, $machine);
 
@@ -112,17 +115,138 @@ test('an agent step runs in its container with the prompt, the repo and a write 
         ->and($spec['env']['SERVEROS_AGENT_PR_BRANCH'])->toBe("serveros/agent-{$run->id}-fix")
         ->and($spec['env']['SERVEROS_AGENT_TITLE'])->toBe('Fix builds: changes from the agent')
         ->and($spec['env']['SERVEROS_GH_TOKEN'])->toBe('ghs_write_token')
-        ->and($spec['env']['SERVEROS_AGENT_AUTHOR_NAME'])->toBe('serveros[bot]')
-        ->and($spec['env']['SERVEROS_AGENT_AUTHOR_EMAIL'])->toBe('339015915+serveros[bot]@users.noreply.github.com')
+        ->and($spec['env']['SERVEROS_AGENT_HANDOFF'])->toBe('1')
         ->and($spec['env']['SERVEROS_AGENT_RUN'])->toBe("Fix builds, run #{$run->id}")
         ->and($spec['env']['SERVEROS_AGENT_PROMPT'])->toStartWith('Fix the failing build of shop.')
         ->and($spec['env']['SERVEROS_AGENT_PROMPT'])->toContain('ServerOS pushes a branch and opens a pull request');
 
     Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/access_tokens')
-        && $r['permissions'] === ['contents' => 'write', 'pull_requests' => 'write', 'metadata' => 'read']
+        && $r['permissions'] === ['contents' => 'read', 'metadata' => 'read']
         && $r['repositories'] === ['shop']);
+    Http::assertNotSent(fn (Request $r) => str_ends_with($r->url(), '/access_tokens') && ($r['permissions']['contents'] ?? null) === 'write');
 
-    expect(AgentSpec::script())->toContain('env -u GIT_TOKEN -u SERVEROS_GH_TOKEN -u GH_TOKEN');
+    expect(AgentSpec::script())->toContain('env -u GIT_TOKEN -u SERVEROS_GH_TOKEN -u GH_TOKEN')
+        ->not->toContain('export GIT_TOKEN')
+        ->not->toContain('push -q origin')
+        ->toContain('core.hooksPath=/dev/null');
+});
+
+/** @param  list<array{path: string, mode: string, content: string|null}>  $files */
+function agentChangeLog(array $files, string $base): array
+{
+    $payload = base64_encode(gzencode((string) json_encode(['base' => $base, 'files' => $files])));
+    $chunks = str_split($payload, 40);
+
+    return [
+        '::serveros-model:: claude-haiku-5-5',
+        '::serveros-stat:: 2 files changed, 1 insertion(+), 1 deletion(-)',
+        '::serveros-summary::',
+        'Pinned left-pad.',
+        '::serveros-changes:: '.hash('sha256', $payload).' '.count($chunks),
+        ...array_map(fn (string $c) => '::serveros-change:: '.$c, $chunks),
+    ];
+}
+
+test('ServerOS opens the agent’s pull request itself, so no token that can write ever goes to the machine', function () {
+    [$workspace, $machine] = agentWorkspace();
+    $base = str_repeat('a', 40);
+    Http::swap(new Factory);
+    Http::fake([
+        '127.0.0.1:8090/*' => Http::response(['queued' => true], 202),
+        'api.github.com/app/installations/42/access_tokens' => fn (Request $r) => Http::response(['token' => ($r['permissions']['contents'] ?? null) === 'write' ? 'ghs_write' : 'ghs_read']),
+        "api.github.com/repos/acme/shop/git/commits/{$base}" => Http::response(['sha' => $base, 'tree' => ['sha' => 'basetree']]),
+        'api.github.com/repos/acme/shop/git/blobs' => Http::response(['sha' => 'blob1'], 201),
+        'api.github.com/repos/acme/shop/git/trees' => Http::response(['sha' => 'tree2'], 201),
+        'api.github.com/repos/acme/shop/git/commits' => Http::response(['sha' => 'commit3'], 201),
+        'api.github.com/repos/acme/shop/git/refs' => Http::response(['ref' => 'x'], 201),
+        'api.github.com/repos/acme/shop/pulls' => Http::response(['html_url' => 'https://github.com/acme/shop/pull/9'], 201),
+        '*' => Http::response('ok'),
+    ]);
+    $workflow = agentFlow($workspace, $machine, ['check' => 'npm test']);
+    $run = app(WorkflowEngine::class)->start($workflow, 'manual', 'Run by hand', [], $workspace->owner);
+    $job = DaemonJob::query()->sole();
+
+    expect(json_encode($job->command))->not->toContain('ghs_write')
+        ->and($job->command['job']['env']['SERVEROS_GH_TOKEN'])->toBe('ghs_read');
+
+    agentJobDone($machine, $job, agentChangeLog([
+        ['path' => 'package.json', 'mode' => '100644', 'content' => base64_encode("{}\n")],
+        ['path' => 'old.txt', 'mode' => '100644', 'content' => null],
+    ], $base));
+
+    $run->refresh();
+    expect($run->state)->toBe('succeeded')
+        ->and($run->steps['fix']['message'])->toBe('Opened https://github.com/acme/shop/pull/9 (Claude Code, claude-haiku-5-5)')
+        ->and($run->steps['fix']['pr'])->toBe('https://github.com/acme/shop/pull/9');
+
+    Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/git/blobs') && $r->hasHeader('Authorization', 'Bearer ghs_write') && $r['content'] === base64_encode("{}\n"));
+    Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/git/trees') && $r['base_tree'] === 'basetree'
+        && $r['tree'] === [['path' => 'package.json', 'mode' => '100644', 'type' => 'blob', 'sha' => 'blob1'], ['path' => 'old.txt', 'mode' => '100644', 'type' => 'blob', 'sha' => null]]);
+    Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/git/commits') && $r->method() === 'POST' && $r['parents'] === [$base] && str_starts_with($r['message'], 'Fix builds: changes from the agent'));
+    Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/git/refs') && $r['ref'] === "refs/heads/serveros/agent-{$run->id}-fix" && $r['sha'] === 'commit3');
+    Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/pulls') && $r['base'] === 'main' && $r['head'] === "serveros/agent-{$run->id}-fix"
+        && str_contains($r['body'], 'Pinned left-pad.') && str_contains($r['body'], 'npm test') && str_contains($r['body'], '2 files changed'));
+    Notification::assertSentTo($workspace->owner, MonitorAlert::class, fn (MonitorAlert $n) => $n->subject === 'Agent: https://github.com/acme/shop/pull/9');
+});
+
+test('without the GitHub App on the repository, the agent pushes with the container’s own token as before', function () {
+    [$workspace, $machine] = agentWorkspace();
+    Http::swap(new Factory);
+    Http::fake([
+        '127.0.0.1:8090/*' => Http::response(['queued' => true], 202),
+        'api.github.com/app/installations/42/access_tokens' => Http::response(['message' => 'There is at least one repository that does not exist or is not accessible to the parent installation.'], 422),
+        '*' => Http::response('ok'),
+    ]);
+    app(WorkflowEngine::class)->start(agentFlow($workspace, $machine), 'manual', 'Run by hand', [], $workspace->owner);
+    $env = DaemonJob::query()->sole()->command['job']['env'];
+
+    expect($env)->not->toHaveKey('SERVEROS_AGENT_HANDOFF')
+        ->and($env)->not->toHaveKey('SERVEROS_GH_TOKEN')
+        ->and($env['SERVEROS_AGENT_PR_BRANCH'])->toStartWith('serveros/agent-');
+});
+
+test('the agent’s summary can’t pass itself off as the change ServerOS sends back', function () {
+    expect(substr_count(AgentSpec::script(), "head -c 6000 \"\$work/out.txt\" | grep -v '^::serveros-' | head -n 200"))->toBe(2);
+});
+
+test('a change that comes back damaged, or touches .git, opens no pull request', function () {
+    [$workspace, $machine] = agentWorkspace();
+    $workflow = agentFlow($workspace, $machine);
+    app(WorkflowEngine::class)->start($workflow, 'manual', 'Run by hand', [], $workspace->owner);
+    $job = DaemonJob::query()->sole();
+
+    $log = agentChangeLog([['path' => '.git/hooks/pre-commit', 'mode' => '100755', 'content' => base64_encode('x')]], str_repeat('a', 40));
+    agentJobDone($machine, $job, $log);
+
+    $run = WorkflowRun::query()->sole();
+    expect($run->state)->toBe('failed')
+        ->and($run->steps['fix']['message'])->toContain('in a form ServerOS can’t read');
+    Http::assertNotSent(fn (Request $r) => str_contains($r->url(), '/pulls') || str_contains($r->url(), '/git/'));
+
+    $broken = agentChangeLog([['path' => 'a.txt', 'mode' => '100644', 'content' => base64_encode('x')]], str_repeat('a', 40));
+    array_pop($broken);
+    expect(fn () => AgentSpec::changes(new DaemonJob(['log' => $broken])))->toThrow(RuntimeException::class, 'whole');
+});
+
+test('the workspace’s AI key only goes to agents in workflows last saved by an owner or admin', function () {
+    [$workspace, $machine] = agentWorkspace();
+    WorkspaceAiKey::query()->create(['workspace_id' => $workspace->id, 'provider' => 'anthropic', 'key' => 'sk-ant-theirs', 'hint' => '…eirs']);
+    $member = User::factory()->create(['two_factor_secret' => encrypt('secret'), 'two_factor_confirmed_at' => now()]);
+    $workspace->members()->attach($member, ['role' => 'member']);
+    $workflow = agentFlow($workspace, $machine);
+    $workflow->update(['run_as' => $member->id]);
+
+    app(WorkflowEngine::class)->start($workflow->fresh(), 'manual', 'Run by hand', [], $member);
+    $env = DaemonJob::query()->sole()->command['job']['env'];
+    expect($env)->not->toHaveKey('ANTHROPIC_API_KEY')
+        ->and($env['SERVEROS_AGENT_KEY_WITHHELD'])->toBe('1')
+        ->and(AgentSpec::script())->toContain('only goes to workflows last saved by an owner or admin');
+
+    $workflow->update(['run_as' => $workspace->owner_id]);
+    $this->travel(5)->minutes();
+    $machine->forceFill(['last_seen_at' => now()])->save();
+    app(WorkflowEngine::class)->start($workflow->fresh(), 'manual', 'Run by hand', [], $workspace->owner);
+    expect(DaemonJob::query()->latest('created_at')->get()->first(fn ($j) => isset($j->command['job']['env']['ANTHROPIC_API_KEY']))?->command['job']['env']['ANTHROPIC_API_KEY'])->toBe('sk-ant-theirs');
 });
 
 test('the model, setup and check go to the agent, and the prompt asks it to pass the check', function () {
