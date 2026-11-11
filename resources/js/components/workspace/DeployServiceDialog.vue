@@ -23,6 +23,7 @@ import TemplateIcon from '@/components/workspace/TemplateIcon.vue';
 import TickBox from '@/components/workspace/TickBox.vue';
 import { useStepFrame } from '@/composables/useStepFrame';
 import { useZipUpload } from '@/composables/useZipUpload';
+import { toast } from '@/lib/toast';
 
 export type TemplateField = {
     key: string;
@@ -335,6 +336,15 @@ const form = ref({
 });
 const showExtraEnv = ref(false);
 const errors = ref<Record<string, string>>({});
+
+watch(
+    () => errors.value.form,
+    (message) => {
+        if (message) {
+            toast.error(message);
+        }
+    },
+);
 const submitting = ref(false);
 
 const taken = ref<{ services: string[]; ports: number[] }>({
