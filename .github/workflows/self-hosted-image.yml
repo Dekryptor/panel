@@ -59,6 +59,18 @@ jobs:
               with:
                   persist-credentials: false
 
+            - name: Add panel-ee to the lock
+              env:
+                  COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
+              run: |
+                  if [ -z "$COMPOSER_AUTH" ]; then
+                      echo "::error::COMPOSER_AUTH isn't set in the self-hosted-image environment, so panel-ee can't be added."
+                      exit 1
+                  fi
+                  composer config repositories.panel-ee vcs https://github.com/serveroshq/panel-ee
+                  composer require --no-update serveroshq/panel-ee:dev-main
+                  composer update serveroshq/panel-ee --no-install --no-scripts --ignore-platform-reqs --no-interaction
+
             - name: Set up QEMU
               uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 

@@ -43,11 +43,6 @@ return [
         'api_requests_per_minute' => env('SERVEROS_SELF_HOSTED_API_REQUESTS_PER_MINUTE', 1_000),
     ],
 
-    'promo' => [
-        'code' => env('SERVEROS_PROMO_CODE', 'LAUNCH'),
-        'offer' => env('SERVEROS_PROMO_OFFER', '10% off your first plan'),
-    ],
-
     'workflow_outside_emails_per_day' => (int) env('SERVEROS_WORKFLOW_OUTSIDE_EMAILS_PER_DAY', 200),
 
     'legacy_admin_emails' => (string) env('SERVEROS_ADMIN_EMAILS', ''),

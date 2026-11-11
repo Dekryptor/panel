@@ -11,7 +11,7 @@ You can run the ServerOS panel on your own server, with Docker. It's the same pa
 | The official image (`ghcr.io/serveroshq/panel`) | The open source panel, plus the paid features in the commercial `serveroshq/panel-ee` package | The panel is AGPL-3.0; panel-ee is under its own commercial license and runs as the free edition until you add a license |
 | Built from source (`serveroshq/panel`)          | The community edition: the open source panel only, with no paid code                          | AGPL-3.0                                                                                                                 |
 
-The install script uses the official image. Without a license key it works exactly like the community edition: the same features and limits. The paid features (single sign-on, SCIM, custom roles, your own domains, your own log storage and a status page for every machine) turn on when you paste a key in Settings › License. There's nothing to reinstall or download.
+The install script uses the official image. Without a license key it works exactly like the community edition: the same features and limits. The paid features (single sign-on, SCIM, custom roles, your own domains, your own log storage and one status page for all your machines) turn on when you paste a key in Settings › License. There's nothing to reinstall or download.
 
 Built from source, Settings › License says it's the community edition and how to switch: set `SERVEROS_IMAGE=ghcr.io/serveroshq/panel:latest` in `/opt/serveros/.env` (or run the install script again with `--image=ghcr.io/serveroshq/panel`), then `serveros-panel upgrade` (it backs up first; `docker compose pull && docker compose up -d` in `/opt/serveros` does the same without the backup). Your data stays. Then paste the key in the same place.
 
@@ -214,6 +214,11 @@ SERVEROS_TELEMETRY=false
 ```
 
 On a plain server, add the same line to the panel's `.env` (and run `php artisan config:cache` again if you cache the config). With it off, nothing is sent, and `install:ping` won't send it either. If you activate a license key, serveros.com's license server still knows that key is in use, since activating and the daily license check-in go there too.
+
+Two other requests aren't part of the ping, and `SERVEROS_TELEMETRY=false` doesn't stop them, since updates depend on them. Neither sends anything about your install:
+
+- Every hour the panel asks `https://serveros.com/api/daemon/releases/latest` for the newest daemon release, so it can offer your machines updates. It's a plain GET with the channel and CPU type in the query. `DAEMON_RELEASE_FEED_URL` points it somewhere else; set it empty to stop it, and your machines won't be offered daemon updates.
+- Your machines download the daemon from `https://releases.serveros.com` when they connect and when they update. `DAEMON_RELEASES_URL` changes where from.
 
 ## Upgrading
 

@@ -23,71 +23,74 @@
   <a href="https://serveros.com"><img alt="The ServerOS dashboard: machines, average CPU, last backup and each machine's services" src=".github/assets/dashboard.png" width="900"></a>
 </p>
 
-ServerOS is one place to run the Linux servers you already own. Connect a VPS from any provider with one command, then deploy apps, sites and databases, watch them, back them up and fix them, without living in a terminal. Your servers stay with your provider, on your account.
+ServerOS runs the Linux servers you already own from one place. Connect a VPS from any provider with one command, then deploy apps, sites and databases, watch them, back them up and fix them, without living in a terminal. Your servers stay with your provider, on your account.
 
-This repo is the panel: the web app you and your team work in. It talks to [serverosd](https://github.com/serveroshq/daemon), the small daemon that runs on each of your machines. It's the same panel [serveros.com](https://serveros.com) runs.
+This repo is the panel, the web app you and your team work in. Each server runs [serverosd](https://github.com/serveroshq/daemon), a small daemon the panel talks to. [serveros.com](https://serveros.com) runs this same panel as a hosted service.
 
-## Editions
+## What's in it
 
-The core is open source under the AGPL and free to self-host. serveros.com runs it as a hosted service. A paid license adds enterprise features (single sign-on, SCIM, custom roles and more) through a separate commercial package, `serveroshq/panel-ee`.
-
-- **The official image** (`ghcr.io/serveroshq/panel`), which the install script uses, is this panel plus panel-ee. It runs as the free edition until you add a license: without a key it works exactly like the community edition. Paste a key in Settings › License and the paid features turn on, with nothing to reinstall. panel-ee is under its own commercial license, not the AGPL.
-- **Building from this repo** gives you the community edition: the AGPL code only, with no paid code at all.
-
-[LICENSING.md](.github/LICENSING.md) explains what that means for you.
-
-|                                 | Where                                                     | License                                                                               |
-| ------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| The panel                       | This repo                                                 | [AGPL-3.0](LICENSE), free to self-host                                                |
-| The daemon                      | [serveroshq/daemon](https://github.com/serveroshq/daemon) | [AGPL-3.0](https://github.com/serveroshq/daemon/blob/main/LICENSE), free to self-host |
-| Paid features                   | `serveroshq/panel-ee`, in the official image              | Commercial, off until you add a license key                                           |
-| serveros.com and ServerOS Cloud | [serveros.com](https://serveros.com)                      | A hosted service, not part of this repo                                               |
+- **Machines**: connect a server with one command, see CPU, memory and disk, and install updates.
+- **Services and projects**: deploy from Git or a template, with domains and HTTPS, and copy a project to a test environment before it goes live.
+- **Backups, monitors and logs**: scheduled backups, uptime checks with alerts, status pages, and every service's logs in one place.
+- **Workflows**: run steps on a schedule, on a push or by hand, like deploy, check and promote.
+- **Teams**: members, roles, two-factor sign-in and an activity log.
+- **AI and the API**: an MCP server and an API, so your own tools and assistants can work with your servers.
 
 ## Self-hosting
 
-You need a Linux server with Docker, a domain like `panel.example.com` with an A record for it and one for `*.panel.example.com`, and ports 80, 443 and 8443 open.
+You need a Linux server with Docker, ports 80, 443 and 8443 open, and a domain like `panel.example.com` with two A records pointing at the server: one for `panel.example.com` and one for `*.panel.example.com`.
 
-From a checkout on the server, the install script runs the official image:
+The official image isn't published yet. Until it is, build the panel on your server and install that:
 
 ```sh
 git clone https://github.com/serveroshq/panel.git && cd panel
-sudo bash docker/self-hosted/install.sh --domain=panel.example.com --email=you@example.com
-```
-
-The official image isn't published yet. Until it is, build the community edition on the server and install with that:
-
-```sh
 docker build -f docker/self-hosted/Dockerfile -t serveros/panel:dev .
 sudo bash docker/self-hosted/install.sh --domain=panel.example.com --email=you@example.com --image=serveros/panel --version=dev
 ```
 
-The script writes its settings to `/opt/serveros/.env`, starts the panel and prints a setup code. Open `https://panel.example.com`, enter the code, and the web installer walks you through email and your first account. Lost the code? `serveros-panel setup-code` shows it again.
+The script prints a setup code. Open `https://panel.example.com`, enter it, and the installer walks you through email and your first account. `serveros-panel setup-code` shows the code again if you lose it.
 
-[docs/self-hosting.md](docs/self-hosting.md) has the rest: the editions, installing on a plain server without Docker (the community edition), upgrades, backups, connecting machines and what your install sends (and how to turn it off).
+[docs/self-hosting.md](docs/self-hosting.md) covers the rest: installing without Docker, upgrades, backups, connecting machines, and the anonymous daily ping (and how to turn it off).
+
+## Editions
+
+| Edition                                     | What's in it                                                          | License                                    |
+| ------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------ |
+| Community, built from this repo             | The panel                                                             | [AGPL-3.0](LICENSE), free                  |
+| Official image (`ghcr.io/serveroshq/panel`) | The panel plus `serveroshq/panel-ee`, off until you add a license key | AGPL-3.0, and panel-ee under its own terms |
+| [serveros.com](https://serveros.com)        | The panel, hosted for you                                             | A paid service                             |
+
+Without a key, the official image works exactly like the community edition. A license turns on single sign-on, SCIM, custom roles, your own domains and the other paid features, with nothing to reinstall. [LICENSING.md](.github/LICENSING.md) explains what that means for you. The daemon is [AGPL-3.0](https://github.com/serveroshq/daemon/blob/main/LICENSE) too.
 
 ## Development
 
 You need PHP 8.4, Composer, Node 22 and npm. SQLite works out of the box.
 
 ```sh
-composer setup   # composer install, .env, key, migrate, npm install, build
+composer setup   # install, .env, key, migrate, build
 composer dev     # the panel, queue worker, logs and Vite together
 ```
 
-[CONTRIBUTING.md](.github/CONTRIBUTING.md) has the full setup (with the three `.env` lines that make workspace subdomains work on `serveros.localhost`) and how to run the tests and checks.
+Workspaces live on subdomains, so set these in `.env` and open `http://serveros.localhost:8000`:
 
-## Getting help
+```dotenv
+APP_URL=http://serveros.localhost:8000
+APP_DOMAIN=serveros.localhost
+SESSION_DOMAIN=.serveros.localhost
+```
+
+[CONTRIBUTING.md](.github/CONTRIBUTING.md) has the full setup, the tests and checks CI runs, and how pull requests are reviewed. On Linux, [docker/dev](docker/dev/README.md) runs it all in Docker.
+
+## Help and contributing
 
 - Docs: [docs.serveros.com](https://docs.serveros.com)
 - Questions and ideas: [Discussions](https://github.com/serveroshq/panel/discussions)
 - Chat: [Discord](https://discord.gg/serveros)
 - Bugs: [Issues](https://github.com/serveroshq/panel/issues/new/choose)
 
-Found a security problem? Please don't open an issue. Follow [SECURITY.md](.github/SECURITY.md) instead.
+Found a security problem? Please don't open an issue; follow [SECURITY.md](.github/SECURITY.md).
 
-## Contributing
-
-Read [CONTRIBUTING.md](.github/CONTRIBUTING.md) first. Everyone who takes part agrees to the [Code of Conduct](.github/CODE_OF_CONDUCT.md), and first-time contributors sign our [CLA](.github/CLA.md) in a comment on their pull request.
+Before you open a pull request, read [CONTRIBUTING.md](.github/CONTRIBUTING.md). Everyone who takes part follows the [Code of Conduct](.github/CODE_OF_CONDUCT.md), and first-time contributors sign the [CLA](.github/CLA.md) with a comment on their pull request.
 
 ## License
 

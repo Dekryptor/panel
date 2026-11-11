@@ -3,7 +3,6 @@ import { trans } from 'laravel-vue-i18n';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { ArrowUpRight, Check } from '@lucide/vue';
 import {
-    SolarBadgePercent as BadgePercent,
     SolarBookOpen as BookOpen,
     SolarCircleHelp as CircleHelp,
     SolarLanguages as Languages,
@@ -66,8 +65,10 @@ const support = computed(
         null,
 );
 const docs = computed(() => docsUrl(page.props.docsUrl));
-const feedback = computed(
-    () => `${page.props.feedbackUrl.replace(/\/$/, '')}/`,
+const feedback = computed(() =>
+    page.props.feedbackUrl
+        ? `${page.props.feedbackUrl.replace(/\/$/, '')}/`
+        : null,
 );
 
 const { appearance, updateAppearance } = useAppearance();
@@ -190,17 +191,11 @@ const external = 'ml-auto size-3.5 text-(--ds-text-faint)';
                     <ArrowUpRight :class="external" :stroke-width="1.75" />
                 </a>
             </DropdownMenuItem>
-            <DropdownMenuItem as-child>
+            <DropdownMenuItem v-if="feedback" as-child>
                 <a :href="feedback" target="_blank" rel="noopener" :class="row">
                     <MessageSquare :class="icon" :stroke-width="1.6" />
                     {{ $t('Feedback') }}
                     <ArrowUpRight :class="external" :stroke-width="1.75" />
-                </a>
-            </DropdownMenuItem>
-            <DropdownMenuItem v-if="page.props.staff?.sales" as-child>
-                <a :href="`${page.props.appUrl}/admin/sales`" :class="row">
-                    <BadgePercent :class="icon" :stroke-width="1.6" />
-                    {{ $t('Sales reps') }}
                 </a>
             </DropdownMenuItem>
 

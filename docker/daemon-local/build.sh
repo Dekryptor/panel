@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a Docker-only Linux release (for this Mac's CPU) from the private daemon repository.
+# Build a Docker-only Linux release (for this Mac's CPU) from the daemon repository.
 set -euo pipefail
 
 # The test node runs at the Mac's own architecture.
@@ -10,7 +10,6 @@ SOURCE="${SERVEROS_DAEMON_SOURCE:-/private/tmp/serveros-daemon}"
 VERSION=v0.0.0-local
 
 if [ ! -d "$SOURCE/.git" ]; then
-  # Private repo: needs GitHub access (gh auth login, or an SSH key).
   git clone https://github.com/serveroshq/daemon.git "$SOURCE"
 fi
 

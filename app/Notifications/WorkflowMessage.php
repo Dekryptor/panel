@@ -42,7 +42,7 @@ class WorkflowMessage extends Notification
             }
         }
 
-        $mail->salutation("— {$this->from}");
+        $mail->salutation($this->from);
         $mail->line($this->poweredBy !== null
             ? "Sent by the workspace “{$this->from}” with a [ServerOS]({$this->poweredBy}) workflow. ServerOS didn’t write this message."
             : "Sent by the workspace “{$this->from}” with a workflow.");

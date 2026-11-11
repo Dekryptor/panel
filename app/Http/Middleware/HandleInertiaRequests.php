@@ -7,7 +7,6 @@ use App\Enums\Plan;
 use App\Models\Workspace;
 use App\Support\Admin\Impersonation;
 use App\Support\Brand;
-use App\Support\CloudOffer;
 use App\Support\Docs\DocsUrl;
 use App\Support\Extensions\Extensions;
 use App\Support\Extensions\MarketingSite;
@@ -18,7 +17,6 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Route as Router;
 use Inertia\Middleware;
-use ServerOS\Saas\Changelog\ChangelogFeed;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -68,11 +66,10 @@ class HandleInertiaRequests extends Middleware
             'appUrl' => rtrim((string) config('app.url'), '/'),
             'siteOrigin' => $this->siteOrigin($request),
             'openSource' => (bool) config('serveros.open_source'),
-            'cloudOpen' => fn () => CloudOffer::forMarketing($request->user()) !== null,
             'statusUrl' => filled(config('serveros.status_page')) ? 'https://status.'.config('app.domain') : null,
             'brand' => Brand::shared(),
             'docsUrl' => DocsUrl::home(),
-            'feedbackUrl' => Router::has('feedback.index') ? rtrim(route('feedback.index'), '/') : 'https://feedback.serveros.com',
+            'feedbackUrl' => Router::has('feedback.index') ? rtrim(route('feedback.index'), '/') : null,
             'pricing' => function () use ($request): array {
                 $currency = Currency::forVisitor($request);
 
@@ -86,9 +83,6 @@ class HandleInertiaRequests extends Middleware
                     'mcpPack' => McpUsage::packPrice($currency),
                 ];
             },
-            'promo' => filled(config('serveros.promo.code'))
-                ? ['code' => (string) config('serveros.promo.code'), 'offer' => (string) config('serveros.promo.offer')]
-                : null,
             'auth' => [
                 'user' => $request->user(),
             ],
@@ -106,9 +100,6 @@ class HandleInertiaRequests extends Middleware
                     'pinnedAt' => $workspace->pivot->pinned_at === null ? null : (string) $workspace->pivot->pinned_at,
                 ])
                 ->all() ?? [],
-            'changelog' => fn () => $request->routeIs('workspace.*') && $request->user() !== null && class_exists(ChangelogFeed::class)
-                ? ChangelogFeed::for($request->user())
-                : null,
             'extensions' => function () use ($request): ?array {
                 $workspace = self::workspacePage($request);
 

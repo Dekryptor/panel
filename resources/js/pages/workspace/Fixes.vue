@@ -858,10 +858,7 @@ const field =
                                         ...selected.logs,
                                         ...(selected.errors.length &&
                                         selected.logs.length
-                                            ? [
-                                                  '',
-                                                  '— elsewhere on the machine —',
-                                              ]
+                                            ? ['', 'Elsewhere on the machine:']
                                             : []),
                                         ...selected.errors,
                                     ].join('\n')

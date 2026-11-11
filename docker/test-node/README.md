@@ -23,10 +23,10 @@ it, and the daemon pins that same certificate when it enrols
 ## What you need
 
 - macOS with [Herd](https://herd.laravel.com) and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
-- The panel running locally at `https://serveros.test` (see the main README,
-  "Running it locally"), secured: `herd secure serveros`.
-- GitHub access to the private `serveroshq/daemon` repo (`gh auth login`), to
-  build the daemon.
+- The panel running locally at `https://serveros.test` (see
+  [CONTRIBUTING.md](../../.github/CONTRIBUTING.md)), secured: `herd secure serveros`.
+
+This is for macOS with Herd only. On Linux, use [docker/dev](../dev/README.md).
 
 ## The short way: Artisan
 
@@ -86,7 +86,7 @@ Copies your Herd certificate in, builds the node image and starts
 
 ## Connect it
 
-1. In the panel, go to **Machines → Connect server** and copy the command.
+1. In the panel, go to **Machines › Connect machine** and copy the command.
 2. Open a shell on the node and paste the command as it is (it uses `sudo bash`,
    which is fine):
 

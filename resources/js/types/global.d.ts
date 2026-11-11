@@ -27,7 +27,7 @@ declare module '@inertiajs/core' {
                 source: string | null;
             };
             docsUrl: string;
-            feedbackUrl: string;
+            feedbackUrl: string | null;
             promo: { code: string; offer: string } | null;
             cloudCredit?: string | null;
             upgrade?: { href: string; label: string } | null;
