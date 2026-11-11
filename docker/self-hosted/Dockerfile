@@ -67,7 +67,7 @@ RUN --mount=type=secret,id=composer_auth,env=COMPOSER_AUTH \
     && composer update ${REMOVE_PACKAGES} --no-dev --no-scripts --no-autoloader --no-install --prefer-dist \
     && composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 COPY . .
