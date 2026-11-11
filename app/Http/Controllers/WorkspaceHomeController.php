@@ -71,7 +71,7 @@ class WorkspaceHomeController extends Controller
 
     /**
      * @param  Collection<int, Machine>  $machines
-     * @return array{machines: int, environments: array<string, int>, services: int, averageCpu: int, busy: int, backedUp: int, cpuHistory: list<int|null>}
+     * @return array{machines: int, environments: array<string, int>, services: int, averageCpu: int, busy: int, backedUp: int, cpuHistory: list<int|null>, cpuTimeline: list<int|null>}
      */
     private function stats(Collection $machines): array
     {
@@ -89,6 +89,7 @@ class WorkspaceHomeController extends Controller
             'busy' => $machines->filter(fn (Machine $machine) => $machine->cpu_percent >= self::BUSY_CPU_PERCENT)->count(),
             'backedUp' => $machines->filter(fn (Machine $machine) => $machine->last_backup_at?->gte($recentBackupCutoff) ?? false)->count(),
             'cpuHistory' => $this->cpuHistory($machines),
+            'cpuTimeline' => $this->cpuHistory($machines, 60, 60),
         ];
     }
 
@@ -96,17 +97,16 @@ class WorkspaceHomeController extends Controller
      * @param  Collection<int, Machine>  $machines
      * @return list<int|null>
      */
-    private function cpuHistory(Collection $machines): array
+    private function cpuHistory(Collection $machines, int $step = 300, int $count = 12): array
     {
-        $step = 300;
         $last = intdiv(now()->getTimestamp(), $step);
         if ($machines->isEmpty()) {
-            return array_fill(0, 12, null);
+            return array_fill(0, $count, null);
         }
 
         $buckets = MachineSample::query()
             ->whereIn('machine_id', $machines->modelKeys())
-            ->where('ts', '>', ($last - 11) * $step)
+            ->where('ts', '>', ($last - $count + 1) * $step)
             ->whereNotNull('cpu')
             ->selectRaw('(ts / '.$step.') as bucket, avg(cpu) as cpu')
             ->groupBy('bucket')
@@ -114,7 +114,7 @@ class WorkspaceHomeController extends Controller
 
         return array_map(
             fn (int $bucket) => isset($buckets[$bucket]) ? (int) round((float) $buckets[$bucket]) : null,
-            range($last - 11, $last),
+            range($last - $count + 1, $last),
         );
     }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
-import { PanelLeft, PinOff, Search } from '@lucide/vue';
+import { ChevronDown, PanelLeft, PinOff, Search } from '@lucide/vue';
 import {
     computed,
     nextTick,
@@ -115,7 +115,33 @@ const groups = computed<Group[]>(() => {
     ].filter((group) => group.rows.length > 0);
 });
 
-const allRows = computed(() => groups.value.flatMap((group) => group.rows));
+const GROUPS_KEY = 'workspace-sidebar-groups';
+const closedGroups = ref<string[]>([]);
+
+function groupOpen(group: Group): boolean {
+    return (
+        collapsed ||
+        !closedGroups.value.includes(group.key) ||
+        group.rows.some((row) => row.item?.active)
+    );
+}
+
+function toggleGroup(key: string): void {
+    closedGroups.value = closedGroups.value.includes(key)
+        ? closedGroups.value.filter((k) => k !== key)
+        : [...closedGroups.value, key];
+
+    try {
+        window.localStorage.setItem(
+            GROUPS_KEY,
+            JSON.stringify(closedGroups.value),
+        );
+    } catch {}
+}
+
+const allRows = computed(() =>
+    groups.value.filter(groupOpen).flatMap((group) => group.rows),
+);
 
 type Box = { top: number; left: number; width: number; height: number };
 
@@ -189,6 +215,13 @@ let observer: ResizeObserver | undefined;
 let stopFinish: (() => void) | undefined;
 
 onMounted(async () => {
+    try {
+        const saved = JSON.parse(
+            window.localStorage.getItem(GROUPS_KEY) ?? '[]',
+        );
+        closedGroups.value = Array.isArray(saved) ? saved : [];
+    } catch {}
+
     await nextTick();
     measure();
     requestAnimationFrame(() => (activeReady.value = true));
@@ -209,7 +242,7 @@ onBeforeUnmount(() => {
 });
 
 watch(
-    () => [collapsed, allRows.value.length],
+    () => [collapsed, allRows.value.length, closedGroups.value.length],
     async () => {
         await nextTick();
         measure();
@@ -320,18 +353,36 @@ const rowClass =
                 />
 
                 <template v-for="(group, index) in groups" :key="group.key">
-                    <h2
-                        v-if="group.label && !collapsed"
-                        class="mt-5 mb-1.5 px-2.5 text-[13px]/4 text-(--ds-text-faint)"
-                    >
-                        {{ $t(group.label) }}
+                    <h2 v-if="group.label && !collapsed" class="mt-5 mb-1.5">
+                        <button
+                            type="button"
+                            class="group/head flex w-full cursor-pointer items-center justify-between rounded-md px-2.5 py-0.5 text-[12.5px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
+                            :class="focusRing"
+                            :aria-expanded="groupOpen(group)"
+                            @click="toggleGroup(group.key)"
+                        >
+                            {{ $t(group.label) }}
+                            <ChevronDown
+                                class="size-3.5 opacity-0 transition-[transform,opacity] duration-200 group-hover/head:opacity-100 group-focus-visible/head:opacity-100"
+                                :class="{
+                                    '-rotate-90 opacity-100': !groupOpen(group),
+                                }"
+                                :stroke-width="1.75"
+                            />
+                        </button>
                     </h2>
                     <div
                         v-else-if="index > 0"
                         class="mx-2 my-3 border-t border-(--ds-divider)"
                         aria-hidden="true"
                     />
-                    <ul class="flex flex-col gap-px">
+                    <ul
+                        v-if="groupOpen(group)"
+                        class="flex flex-col gap-px"
+                        :class="{
+                            'sidebar-tree': group.label && !collapsed,
+                        }"
+                    >
                         <li
                             v-for="row in group.rows"
                             :key="row.key"

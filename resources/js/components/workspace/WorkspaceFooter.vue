@@ -39,7 +39,7 @@ const links = computed(() =>
 
 <template>
     <footer
-        class="flex h-10 shrink-0 items-center justify-between gap-4 px-5 font-ui text-[13px]/5 text-(--ds-text-muted)"
+        class="flex h-10 shrink-0 items-center justify-between gap-4 border-t border-(--ds-border) px-5 font-ui text-[13px]/5 text-(--ds-text-muted)"
     >
         <p class="flex min-w-0 items-center gap-2">
             <img

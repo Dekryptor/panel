@@ -155,4 +155,5 @@ export type WorkspaceStats = {
     busy: number;
     backedUp: number;
     cpuHistory: (number | null)[];
+    cpuTimeline: (number | null)[];
 };

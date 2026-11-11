@@ -60,6 +60,7 @@ test('connected machines turn onboarding into fleet stats', function () {
                 'busy' => 1,
                 'backedUp' => 2,
                 'cpuHistory' => array_fill(0, 12, null),
+                'cpuTimeline' => array_fill(0, 60, null),
             ]));
 });
 

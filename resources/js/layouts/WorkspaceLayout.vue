@@ -136,7 +136,6 @@ watch(
         <SubscriptionBanner />
         <div
             class="relative flex min-h-0 flex-1 overflow-hidden bg-(--ds-panel) font-ui text-(--ds-text) antialiased"
-            :class="{ 'rounded-t-2xl': subscriptionNotice }"
         >
             <a
                 href="#main"
@@ -145,33 +144,32 @@ watch(
                 {{ ' ' + $t('Skip to content') + ' ' }}
             </a>
 
-            <aside
-                v-if="layout === 'sidebar'"
-                class="hidden shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block"
-                :class="collapsed ? 'w-16' : 'w-56'"
+            <div
+                class="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-(--ds-frame)"
             >
-                <WorkspaceSidebar
-                    :collapsed="collapsed"
-                    collapsible
-                    @toggle="toggleCollapsed"
-                    @search="openSearch"
-                />
-            </aside>
-
-            <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-                <WorkspaceNavBar
-                    :sidebar="layout === 'sidebar'"
-                    @search="openSearch"
-                    @menu="mobileOpen = true"
-                />
-
-                <div
-                    class="relative flex min-h-0 min-w-0 grow px-2"
-                    :class="{ 'lg:pl-0': layout === 'sidebar' }"
+                <aside
+                    v-if="layout === 'sidebar'"
+                    class="hidden shrink-0 border-r border-(--ds-border) bg-(--ds-sidebar) transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block"
+                    :class="collapsed ? 'w-16' : 'w-60'"
                 >
+                    <WorkspaceSidebar
+                        :collapsed="collapsed"
+                        collapsible
+                        @toggle="toggleCollapsed"
+                        @search="openSearch"
+                    />
+                </aside>
+
+                <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <WorkspaceNavBar
+                        :sidebar="layout === 'sidebar'"
+                        @search="openSearch"
+                        @menu="mobileOpen = true"
+                    />
+
                     <main
                         id="main"
-                        class="relative isolate flex min-w-0 grow flex-col overflow-hidden rounded-2xl border border-(--ds-border) bg-(--ds-frame)"
+                        class="relative isolate flex min-h-0 min-w-0 grow flex-col overflow-hidden border-t border-(--ds-border) bg-(--ds-frame)"
                     >
                         <div
                             class="assistant-page-glow pointer-events-none absolute inset-0 z-20 rounded-[inherit]"
@@ -195,32 +193,32 @@ watch(
                             <slot v-else />
                         </div>
                     </main>
-                </div>
 
-                <WorkspaceFooter />
+                    <WorkspaceFooter />
+                </div>
             </div>
 
             <div
                 v-if="isDesktop"
                 id="assistant-panel"
-                class="hidden shrink-0 overflow-hidden py-2 transition-[width,padding-right,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none lg:block"
+                class="hidden shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none lg:block"
                 :class="
                     assistantOpen
-                        ? 'pr-2 opacity-100'
-                        : 'pointer-events-none pr-0 opacity-0'
+                        ? 'opacity-100'
+                        : 'pointer-events-none opacity-0'
                 "
                 :style="{
                     width: assistantOpen
                         ? assistantExpanded
                             ? '50%'
-                            : 'calc(400px + 0.5rem)'
+                            : '400px'
                         : '0px',
                 }"
                 :inert="!assistantOpen"
                 @keydown.esc="assistantOpen = false"
             >
                 <div
-                    class="h-full overflow-hidden rounded-2xl border border-(--ds-border) bg-(--ds-panel)"
+                    class="h-full overflow-hidden border-l border-(--ds-border) bg-(--ds-frame)"
                     :class="
                         assistantExpanded ? 'w-full min-w-[400px]' : 'w-[400px]'
                     "

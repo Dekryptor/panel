@@ -6,7 +6,7 @@ export type AppButtonVariant = 'primary' | 'secondary' | 'quiet' | 'danger';
 export type AppButtonSize = 'md' | 'sm' | 'xs';
 
 const base =
-    'inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-[6px] border font-medium whitespace-nowrap transition-[background-color,border-color,color,scale] duration-150 select-none active:scale-[0.97] motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring) disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 motion-reduce:transition-none [&_svg]:shrink-0';
+    'inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-[9px] border font-medium whitespace-nowrap transition-[background-color,border-color,color,scale] duration-150 select-none active:scale-[0.97] motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring) disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 motion-reduce:transition-none [&_svg]:shrink-0';
 
 const sizes: Record<AppButtonSize, string> = {
     md: 'h-8 px-3 text-[13px]/4',
