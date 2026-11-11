@@ -20,7 +20,7 @@ class NavLayoutController extends Controller
         ]);
 
         $request->user()
-            ->forceFill(['nav_layout' => $validated['layout'] === 'top' ? null : $validated['layout']])
+            ->forceFill(['nav_layout' => $validated['layout'] === 'sidebar' ? null : $validated['layout']])
             ->save();
 
         return back();

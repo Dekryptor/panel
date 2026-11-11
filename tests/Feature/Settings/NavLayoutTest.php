@@ -3,18 +3,19 @@
 use App\Models\User;
 use App\Models\Workspace;
 
-test('the dashboard navigation can be switched to a sidebar and back', function () {
+test('the sidebar is the default, and the navigation can move to a top bar and back', function () {
     $user = User::factory()->create();
+    expect($user->nav_layout)->toBeNull();
 
     $this->actingAs($user)
         ->from('/settings/appearance')
-        ->put('/settings/appearance/navigation', ['layout' => 'sidebar'])
+        ->put('/settings/appearance/navigation', ['layout' => 'top'])
         ->assertRedirect('/settings/appearance');
 
-    expect($user->refresh()->nav_layout)->toBe('sidebar');
+    expect($user->refresh()->nav_layout)->toBe('top');
 
     $this->actingAs($user)
-        ->put('/settings/appearance/navigation', ['layout' => 'top'])
+        ->put('/settings/appearance/navigation', ['layout' => 'sidebar'])
         ->assertRedirect();
 
     expect($user->refresh()->nav_layout)->toBeNull();

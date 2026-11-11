@@ -18,9 +18,7 @@ export function useNavLayout(): {
     const layout = computed<NavLayout>(
         () =>
             pending.value ??
-            (page.props.auth?.user?.nav_layout === 'sidebar'
-                ? 'sidebar'
-                : 'top'),
+            (page.props.auth?.user?.nav_layout === 'top' ? 'top' : 'sidebar'),
     );
 
     function setLayout(value: NavLayout): void {
