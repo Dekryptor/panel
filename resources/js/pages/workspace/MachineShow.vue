@@ -1026,13 +1026,13 @@ function usage(mount: string): { percent: number; free: number } | null {
                         <p
                             class="text-2xl/8 font-medium tracking-[-0.005em] tabular-nums"
                         >
-                            {{ machine.inventory?.services.length ?? 0 }}
+                            {{ machine.inventory?.services?.length ?? 0 }}
                         </p>
                         <p class="truncate text-xs/4 text-(--ds-text-faint)">
                             {{
                                 $t(':value listening ports', {
                                     value: String(
-                                        machine.inventory?.listeners.length ??
+                                        machine.inventory?.listeners?.length ??
                                             0,
                                     ),
                                 }) + ' '

@@ -55,3 +55,15 @@ test('another workspace\'s services stay out of the list', function () {
     $this->actingAs(User::factory()->create())->get('https://'.$workspace->host().'/services')
         ->assertForbidden();
 });
+
+test('a service saved without ports still lists, with none', function () {
+    $workspace = Workspace::factory()->create();
+    $machine = Machine::factory()->for($workspace)->create();
+    $machine->forceFill(['inventory' => ['services' => [['key' => 'docker:old', 'name' => 'old-db', 'kind' => 'container', 'status' => 'running']]]])->save();
+
+    $this->actingAs($workspace->owner)->get('https://'.$workspace->host().'/services')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('services', 1)
+            ->where('services.0.ports', [])
+            ->etc());
+});
