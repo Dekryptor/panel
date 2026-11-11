@@ -34,6 +34,7 @@ import AskAiButton from '@/components/workspace/AskAiButton.vue';
 import type { HealthIssue } from '@/lib/healthIssues';
 import ConnectMachineButton from '@/components/workspace/ConnectMachineButton.vue';
 import McpDialog from '@/components/workspace/McpDialog.vue';
+import DotMeter from '@/components/charts/DotMeter.vue';
 import RidgeChart from '@/components/charts/RidgeChart.vue';
 import SegmentedTabs from '@/components/workspace/SegmentedTabs.vue';
 import WorkspacePage from '@/components/workspace/WorkspacePage.vue';
@@ -838,7 +839,7 @@ const focusRing =
 
             <div
                 v-if="hasMachines"
-                class="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]"
+                class="grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_20rem]"
             >
                 <section class="ds-tray" aria-labelledby="list-heading">
                     <div class="ds-tray-head">
@@ -884,12 +885,12 @@ const focusRing =
                                         {{ $t('Provider') }}
                                     </th>
                                     <th
-                                        class="w-32 border-l border-(--ds-divider) px-3 font-normal"
+                                        class="w-40 border-l border-(--ds-divider) px-3 font-normal"
                                     >
                                         {{ $t('CPU') }}
                                     </th>
                                     <th
-                                        class="w-32 border-l border-(--ds-divider) px-3 font-normal"
+                                        class="w-40 border-l border-(--ds-divider) px-3 font-normal"
                                     >
                                         {{ $t('Disk') }}
                                     </th>
@@ -976,20 +977,20 @@ const focusRing =
                                         class="border-l border-(--ds-divider) px-3"
                                     >
                                         <span
-                                            class="relative flex h-6 items-center overflow-hidden rounded-[4px] px-1.5 font-ui-mono text-[12px] tabular-nums"
+                                            class="flex items-center gap-2.5 font-ui-mono text-[12px] tabular-nums"
                                         >
+                                            <DotMeter
+                                                :value="machine.cpu"
+                                                :warn-at="BUSY_CPU"
+                                                :dots="12"
+                                            />
                                             <span
-                                                class="absolute inset-y-0 left-0 rounded-[4px]"
+                                                class="w-9 text-right"
                                                 :class="
                                                     machine.cpu >= BUSY_CPU
-                                                        ? 'bg-(--ds-amber)/25'
-                                                        : 'bg-(--ds-text)/8'
+                                                        ? 'text-(--ds-amber)'
+                                                        : 'text-(--ds-text-secondary)'
                                                 "
-                                                :style="{
-                                                    width: `${Math.min(100, machine.cpu)}%`,
-                                                }"
-                                            />
-                                            <span class="relative"
                                                 >{{ machine.cpu }}%</span
                                             >
                                         </span>
@@ -1003,21 +1004,21 @@ const focusRing =
                                                 machine.diskPercent !==
                                                     undefined
                                             "
-                                            class="relative flex h-6 items-center overflow-hidden rounded-[4px] px-1.5 font-ui-mono text-[12px] tabular-nums"
+                                            class="flex items-center gap-2.5 font-ui-mono text-[12px] tabular-nums"
                                         >
+                                            <DotMeter
+                                                :value="machine.diskPercent"
+                                                :warn-at="BUSY_CPU"
+                                                :dots="12"
+                                            />
                                             <span
-                                                class="absolute inset-y-0 left-0 rounded-[4px]"
+                                                class="w-9 text-right"
                                                 :class="
                                                     machine.diskPercent >=
                                                     BUSY_CPU
-                                                        ? 'bg-(--ds-amber)/25'
-                                                        : 'bg-(--ds-text)/8'
+                                                        ? 'text-(--ds-amber)'
+                                                        : 'text-(--ds-text-secondary)'
                                                 "
-                                                :style="{
-                                                    width: `${Math.min(100, machine.diskPercent)}%`,
-                                                }"
-                                            />
-                                            <span class="relative"
                                                 >{{
                                                     machine.diskPercent
                                                 }}%</span
@@ -1030,17 +1031,17 @@ const focusRing =
                                         >
                                     </td>
                                     <td
-                                        class="border-l border-(--ds-divider) px-3 text-right font-ui-mono text-[12px] text-(--ds-text-secondary) tabular-nums"
+                                        class="border-l border-(--ds-divider) px-3 text-right font-ui-mono text-[12px] whitespace-nowrap text-(--ds-text-secondary) tabular-nums"
                                     >
                                         {{ machine.memory }}
                                     </td>
                                     <td
-                                        class="border-l border-(--ds-divider) px-3 text-right font-ui-mono text-[12px] text-(--ds-text-secondary) tabular-nums"
+                                        class="border-l border-(--ds-divider) px-3 text-right font-ui-mono text-[12px] whitespace-nowrap text-(--ds-text-secondary) tabular-nums"
                                     >
                                         {{ machine.services }}
                                     </td>
                                     <td
-                                        class="border-l border-(--ds-divider) pr-4 pl-3 text-right font-ui-mono text-[12px] text-(--ds-text-muted)"
+                                        class="border-l border-(--ds-divider) pr-4 pl-3 text-right font-ui-mono text-[12px] whitespace-nowrap text-(--ds-text-muted)"
                                     >
                                         {{ machine.lastBackup }}
                                     </td>
@@ -1051,7 +1052,7 @@ const focusRing =
                 </section>
 
                 <aside
-                    class="flex flex-col gap-5"
+                    class="grid items-start gap-5 md:grid-cols-2 2xl:flex 2xl:flex-col"
                     :aria-label="$t('Shortcuts')"
                 >
                     <section class="ds-tray" aria-labelledby="mix-heading">
