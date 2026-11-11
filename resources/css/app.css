@@ -170,7 +170,7 @@
 
 .auth-form {
     & [data-slot='input'] {
-        @apply h-10 rounded-lg border-(--ds-border-strong) bg-(--ds-field) text-[14px] text-(--ds-text) shadow-none placeholder:text-(--ds-text-faint) focus-visible:border-[#3B7BFF] focus-visible:ring-[#3B7BFF]/20 md:text-[14px];
+        @apply h-10 rounded-none border-(--ds-border-strong) bg-(--ds-field) text-[14px] text-(--ds-text) shadow-none placeholder:text-(--ds-text-faint) focus-visible:border-[#14130E] focus-visible:ring-[#14130E]/10 md:text-[14px];
     }
 
     & [data-slot='label'] {
@@ -178,15 +178,15 @@
     }
 
     & [data-slot='checkbox'] {
-        @apply border-(--ds-border-hover) bg-(--ds-field);
+        @apply rounded-none border-(--ds-border-hover) bg-(--ds-field);
     }
 
     & [data-slot='checkbox'][data-state='checked'] {
-        @apply border-[#3B7BFF] bg-[#3B7BFF] text-white;
+        @apply border-[#14130E] bg-[#14130E] text-white;
     }
 
     & [data-slot='slug-input'] {
-        @apply h-10 rounded-lg text-[14px];
+        @apply h-10 rounded-none text-[14px];
     }
 
     & [data-slot='input'][aria-invalid='true'] {
@@ -197,11 +197,11 @@
 .auth-compact {
     & [data-slot='input'],
     & [data-slot='slug-input'] {
-        @apply h-8 rounded-md px-3 text-[13px] md:text-[13px];
+        @apply h-10 rounded-none px-3 text-[14px] md:text-[14px];
     }
 
     & [data-slot='label'] {
-        @apply text-[12px]/4;
+        @apply text-[13px]/4;
     }
 
     & .grid.gap-2 {
@@ -215,68 +215,61 @@
 
     & button:not([data-slot='checkbox']),
     & a[class*='inline-flex'] {
-        @apply h-8 min-h-8 rounded-md text-[12.5px];
+        @apply h-10 min-h-10 rounded-none text-[14px];
     }
 }
 
 .auth-foot {
-    position: relative;
-    border-top-color: transparent !important;
-    padding-top: calc(0.875rem + 18px) !important;
-    padding-bottom: 1.125rem !important;
-
-    &::before {
-        content: '';
-        position: absolute;
-        inset: -1px 0 auto;
-        height: 19px;
-        border-radius: 0 0 16px 16px;
-        background: var(--ds-panel);
-        box-shadow:
-            0 1px 0 rgb(0 0 0 / 0.07),
-            0 6px 12px -6px rgb(0 0 0 / 0.16);
-    }
+    border-top-color: #e6e6e6 !important;
+    background: #f7f7f7 !important;
 }
 
-.auth-bloom {
-    background-image: var(--bloom);
-}
+html .auth-page.auth-page.ds-root {
+    color-scheme: light;
+    --ds-frame: #ffffff;
+    --ds-panel: #ffffff;
+    --ds-subtle: #f7f7f7;
+    --ds-field: #ffffff;
+    --ds-hover: #f4f4f4;
+    --ds-divider: #e6e6e6;
+    --ds-border: #e6e6e6;
+    --ds-border-strong: #dadada;
+    --ds-border-stronger: #cccccc;
+    --ds-border-hover: #cccccc;
+    --ds-text: #000000;
+    --ds-text-secondary: #4d4d4d;
+    --ds-text-muted: #666666;
+    --ds-text-faint: #999999;
+    --ds-ring: #1c4bb0;
+    --ds-amber: #b45309;
+    --ds-amber-bg: #fef6e0;
+    --ds-green: #15803d;
+    --ds-green-bg: #e9f8ee;
+    --ds-red: #b42318;
+    --ds-red-bg: #feeceb;
 
-html.dark .auth-page {
-    --ds-frame: #0a0a0a;
-    --ds-panel: #111111;
-    --ds-subtle: #0d0d0d;
-    --ds-field: #0a0a0a;
-    --ds-hover: #1a1a1a;
-    --ds-divider: #1c1c1c;
-    --ds-border: #222222;
-    --ds-border-strong: #2a2a2a;
-    --ds-border-hover: #3a3a3a;
-
-    & .auth-bloom {
-        background-image: radial-gradient(
-            201.67% 105.6% at 50% -6.34%,
-            #00000a 0%,
-            #010a24 24%,
-            #052070 40%,
-            #1f5fe0 60%,
-            #0d2a6e 78.5%,
-            #0a0a0a 96.5%
-        );
-    }
-
+    & :where([class*='rounded']):not([class*='rounded-full']),
     & .ds-modal {
-        border-color: rgb(255 255 255 / 0.08);
-        background: #111111;
+        border-radius: 0 !important;
     }
 
-    & .auth-foot::before {
-        background: #111111;
-        box-shadow:
-            0 1px 0 rgb(255 255 255 / 0.06),
-            0 6px 12px -6px rgb(0 0 0 / 0.6);
+    & [class*='bg-[#3B7BFF]'] {
+        background: #14130e;
+    }
+
+    & :is(a, button)[class*='bg-[#1C4BB0]'] {
+        border-color: #14130e;
+        background: #14130e;
+        font-weight: 400;
+
+        &:hover {
+            border-color: #2a2924;
+            background: #2a2924;
+        }
     }
 }
+
+@package-css 'auth-art.css';
 
 @package-css 'site-landing-dark.css';
 
@@ -1878,6 +1871,8 @@ html:has(.marketing-page)::-webkit-scrollbar-thumb:active {
     --docs-icon: var(--ds-text-faint);
 }
 
+@package-css 'site-docs-square.css';
+
 .docs-prose {
     color: var(--ds-text-secondary);
     font-size: 15.5px;
@@ -2095,87 +2090,7 @@ html:has(.marketing-page)::-webkit-scrollbar-thumb:active {
     }
 }
 
-.docs-prose.site-prose {
-    color: #4f4f55;
-    font-size: 16.5px;
-    line-height: 1.75;
-
-    & h2 {
-        color: #27272a;
-        font-size: 24px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-    }
-
-    & h3 {
-        color: #27272a;
-        font-size: 18px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-    }
-
-    & strong {
-        color: #27272a;
-        font-weight: 600;
-    }
-
-    & a {
-        color: #2106de;
-        text-decoration-color: rgb(33 6 222 / 0.3);
-
-        &:hover {
-            text-decoration-color: #2106de;
-        }
-    }
-
-    & li::marker {
-        color: #a1a1aa;
-    }
-
-    & :not(pre) > code {
-        background: rgb(39 39 42 / 0.06);
-        color: #27272a;
-    }
-
-    & pre {
-        border-radius: 10px;
-        background: #16161a;
-        box-shadow: 0 0 0 1px rgb(39 39 42 / 0.12);
-    }
-
-    & blockquote {
-        border-left-color: #1f5fe0;
-        border-radius: 0 8px 8px 0;
-        background: rgb(31 95 224 / 0.05);
-        color: #4f4f55;
-    }
-
-    & table {
-        border-radius: 10px;
-        background: #fff;
-        box-shadow: 0 0 0 1px rgb(39 39 42 / 0.1);
-    }
-
-    & th {
-        background: rgb(39 39 42 / 0.03);
-        color: #777880;
-    }
-
-    & td {
-        border-top-color: rgb(39 39 42 / 0.08);
-    }
-
-    & hr {
-        border-top: 1px solid rgb(39 39 42 / 0.08);
-    }
-
-    & img {
-        border-radius: 12px;
-        box-shadow:
-            0 0 0 1px rgb(39 39 42 / 0.1),
-            0 24px 48px -28px rgb(2 16 56 / 0.3);
-    }
-}
+@package-css 'site-prose.css';
 
 @package-css 'admin-prose.css';
 

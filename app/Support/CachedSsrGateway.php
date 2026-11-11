@@ -18,7 +18,7 @@ class CachedSsrGateway extends HttpGateway
     public function dispatch(array $page, ?Request $request = null): ?Response
     {
         $request ??= request();
-        if (! $this->ssrIsEnabled($request) || $request->user() !== null) {
+        if (! $this->ssrIsEnabled($request) || $request->user() !== null || app()->isLocal()) {
             return parent::dispatch($page, $request);
         }
 
