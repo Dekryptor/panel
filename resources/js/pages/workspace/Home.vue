@@ -837,10 +837,7 @@ const focusRing =
                 </div>
             </section>
 
-            <div
-                v-if="hasMachines"
-                class="grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_20rem]"
-            >
+            <div v-if="hasMachines" class="grid items-start gap-5">
                 <section class="ds-tray" aria-labelledby="list-heading">
                     <div class="ds-tray-head">
                         <h2
@@ -1052,7 +1049,7 @@ const focusRing =
                 </section>
 
                 <aside
-                    class="grid items-start gap-5 md:grid-cols-2 2xl:flex 2xl:flex-col"
+                    class="grid items-start gap-5 md:grid-cols-2"
                     :aria-label="$t('Shortcuts')"
                 >
                     <section class="ds-tray" aria-labelledby="mix-heading">

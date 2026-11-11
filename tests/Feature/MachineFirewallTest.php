@@ -170,6 +170,17 @@ test('a database open to the internet needs attention, and one the firewall clos
         ->and(collect($scan['items'])->pluck('text'))->not->toContain('6379/tcp is open to the internet: Redis should usually only listen locally');
 });
 
+test('marking a machine issue as read hides it on the machine page too', function () {
+    [$workspace, $machine, $url] = firewallMachine();
+    $id = "machine-{$machine->id}-exposed-5432";
+    expect(collect(app(WorkspaceHealth::class)->forMachine($machine))->pluck('id'))->toContain($id);
+
+    $this->actingAs($workspace->owner)->post('https://'.$workspace->host().'/issues/dismiss', ['ids' => [$id]])->assertRedirect();
+
+    expect(collect(app(WorkspaceHealth::class)->forMachine($machine->fresh()))->pluck('id'))->not->toContain($id)
+        ->and(collect(app(WorkspaceHealth::class)->issues($workspace->fresh()))->pluck('id'))->not->toContain($id);
+});
+
 test('only addresses nothing outside can reach count as internal: loopback, link-local, Tailscale and Docker’s own bridges', function (string $address, bool $public) {
     expect(Firewall::isPublic($address, ['172.18.0.1', '172.19.0.1']))->toBe($public);
 })->with([

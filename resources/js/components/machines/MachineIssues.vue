@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
+import { Check } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import AskAiButton from '@/components/workspace/AskAiButton.vue';
 import type { HealthIssue } from '@/lib/healthIssues';
 
 const props = defineProps<{ issues: HealthIssue[] }>();
+const page = usePage<{ workspaceAccess?: { permissions: string[] } }>();
 
 const shown = computed(() =>
     props.issues.filter((issue) => issue.ask && issue.severity !== 'notice'),
@@ -15,6 +17,27 @@ const dot: Record<HealthIssue['severity'], string> = {
     warning: 'bg-(--ds-amber)',
     notice: 'bg-(--ds-text-faint)',
 };
+
+const canDismiss = computed(
+    () =>
+        page.props.workspaceAccess?.permissions.includes('manage-machines') ??
+        false,
+);
+const dismissing = ref<string[]>([]);
+
+function dismiss(id: string): void {
+    dismissing.value = [id];
+    router.post(
+        '/issues/dismiss',
+        { ids: [id] },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['issues'],
+            onFinish: () => (dismissing.value = []),
+        },
+    );
+}
 
 const focusRing =
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring)';
@@ -56,6 +79,22 @@ const focusRing =
                 >
                     {{ issue.action }}
                 </Link>
+                <button
+                    v-if="canDismiss"
+                    type="button"
+                    class="ds-raised-button flex size-8 shrink-0 cursor-pointer items-center justify-center p-0! disabled:opacity-50"
+                    :class="focusRing"
+                    :disabled="dismissing.includes(issue.id)"
+                    :title="$t('Mark as read')"
+                    :aria-label="
+                        $t('Mark as read: :title', {
+                            title: String(issue.title),
+                        })
+                    "
+                    @click="dismiss(issue.id)"
+                >
+                    <Check class="size-3.5" :stroke-width="1.9" />
+                </button>
             </div>
         </div>
     </section>

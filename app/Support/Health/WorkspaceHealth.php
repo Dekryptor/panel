@@ -104,7 +104,12 @@ class WorkspaceHealth
     /** @return list<Issue> */
     public function forMachine(Machine $machine): array
     {
-        return $this->machineIssues($machine);
+        $dismissed = $machine->workspace->dismissed_issues ?? [];
+
+        return array_values(array_filter(
+            $this->machineIssues($machine),
+            fn (array $issue) => ! array_key_exists($issue['id'], $dismissed) || $dismissed[$issue['id']] !== $issue['since'],
+        ));
     }
 
     /**
