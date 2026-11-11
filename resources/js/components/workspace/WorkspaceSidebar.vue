@@ -273,15 +273,18 @@ const rowClass =
         >
             <a
                 :href="page.props.appUrl"
-                class="mr-auto flex items-center rounded-md"
+                class="mr-auto flex min-w-0 items-center gap-2 rounded-md"
                 :class="focusRing"
-                aria-label="ServerOS"
             >
                 <img
                     src="/images/landing/serveros-logo.svg"
                     alt=""
-                    class="size-[18px] object-contain invert dark:invert-0"
+                    class="size-[18px] shrink-0 object-contain invert dark:invert-0"
                 />
+                <span
+                    class="truncate text-[15px]/5 font-semibold tracking-[-0.02em]"
+                    >{{ page.props.name }}</span
+                >
             </a>
             <button
                 type="button"
