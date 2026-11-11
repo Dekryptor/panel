@@ -62,8 +62,8 @@
         "@vitejs/plugin-vue": "^6.0.0",
         "concurrently": "^10.0.3",
         "typescript": "^5.2.2",
-        "vite": "^8.3.7",
-        "vite-plus": "0.3.0",
+        "vite": "npm:@voidzero-dev/vite-plus-core@1.6.0",
+        "vite-plus": "1.6.0",
         "vue-tsc": "^2.2.12"
     },
     "optionalDependencies": {
@@ -76,14 +76,10 @@
         "lightningcss-win32-x64-msvc": "^1.29.1"
     },
     "overrides": {
-        "@vitest/browser": "4.1.12",
-        "@vitest/browser-preview": "4.1.12",
-        "@vitest/mocker": "4.1.12",
         "laravel-react-i18n": {
             "react": "$react"
         },
         "minimatch": "^11.0.7",
-        "tinypool": "^2.2.0",
-        "vitest": "4.1.12"
+        "vite": "npm:@voidzero-dev/vite-plus-core@1.6.0"
     }
 }

@@ -123,7 +123,7 @@ at http://3000.localhost:8088. With `DAEMON_LOCAL_NODE_PORT=8088` in `.env`
 ## When it doesn't work
 
 - **The install command can't reach `serveros.test`:** check `getent hosts
-serveros.test` on the node. It should be Docker's host address. If not, run
+  serveros.test` on the node. It should be Docker's host address. If not, run
   `systemctl restart serveros-local-hosts`.
 - **Certificate errors from curl or the daemon:** your Herd certificate changed
   (for example after reinstalling Herd). Run `docker/test-node/up.sh --rebuild`.

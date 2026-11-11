@@ -1061,8 +1061,7 @@ const label = 'text-[12px]/5 font-[550] text-(--wf-muted)';
                         'The team means owners and admins, as each has chosen under Settings › Profile, plus the workspace’s alert webhook. You can use',
                     )
                 }}
-                <code class="font-ui-mono">{{ placeholders }}</code
-                >.
+                <code class="font-ui-mono">{{ placeholders }}</code>.
             </span>
         </template>
 

@@ -573,8 +573,7 @@ const focusRing =
                 :href="upgrade.href"
                 class="font-medium text-(--ds-blue) hover:underline"
                 >{{ $t('a plan that includes them') }}</Link
-            ><template v-else>{{ $t('a plan that includes them') }}</template
-            >.
+            ><template v-else>{{ $t('a plan that includes them') }}</template>.
         </div>
 
         <div

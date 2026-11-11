@@ -165,8 +165,7 @@ const hint = 'text-[12px]/4 text-(--wf-faint)';
                 ) +
                 ' '
             }}
-            <code class="font-ui-mono">{{ placeholders }}</code
-            >.
+            <code class="font-ui-mono">{{ placeholders }}</code>.
         </span>
     </div>
 
