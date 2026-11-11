@@ -40,17 +40,15 @@ This repo is the panel, the web app you and your team work in. Each server runs 
 
 You need a Linux server with Docker, ports 80, 443 and 8443 open, and a domain like `panel.example.com` with two A records pointing at the server: one for `panel.example.com` and one for `*.panel.example.com`.
 
-The official image isn't published yet. Until it is, build the panel on your server and install that:
+Then run this on the server:
 
 ```sh
-git clone https://github.com/serveroshq/panel.git && cd panel
-docker build -f docker/self-hosted/Dockerfile -t serveros/panel:dev .
-sudo bash docker/self-hosted/install.sh --domain=panel.example.com --email=you@example.com --image=serveros/panel --version=dev
+curl -fsSL https://raw.githubusercontent.com/serveroshq/panel/main/docker/self-hosted/install.sh | sudo bash -s -- --domain=panel.example.com --email=you@example.com
 ```
 
-The script prints a setup code. Open `https://panel.example.com`, enter it, and the installer walks you through email and your first account. `serveros-panel setup-code` shows the code again if you lose it.
+It installs Docker if it's missing, runs the official image (`ghcr.io/serveroshq/panel`) and prints a setup code. Open `https://panel.example.com`, enter it, and the installer walks you through email and your first account. `serveros-panel setup-code` shows the code again if you lose it.
 
-[docs/self-hosting.md](docs/self-hosting.md) covers the rest: installing without Docker, upgrades, backups, connecting machines, and the anonymous daily ping (and how to turn it off).
+[docs/self-hosting.md](docs/self-hosting.md) covers the rest: building the community edition yourself, installing without Docker, upgrades, backups, connecting machines, and the anonymous daily ping (and how to turn it off).
 
 ## Editions
 

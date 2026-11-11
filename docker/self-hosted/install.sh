@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Install ServerOS on your own server, with Docker, from a checkout:
+# Install ServerOS on your own server, with Docker:
 #
-#   sudo bash docker/self-hosted/install.sh --domain=panel.example.com --email=you@example.com
+#   curl -fsSL https://raw.githubusercontent.com/serveroshq/panel/main/docker/self-hosted/install.sh | sudo bash -s -- --domain=panel.example.com --email=you@example.com
+#
+# or from a checkout: sudo bash docker/self-hosted/install.sh --domain=... --email=...
 #
 # It runs the official image, ghcr.io/serveroshq/panel: the open source
 # panel (AGPL-3.0) plus the paid features, in the commercial panel-ee
@@ -46,7 +48,7 @@ for arg in "$@"; do
         --dir=*) DIR="${arg#--dir=}" ;;
         --version=*) VERSION="${arg#--version=}"; VERSION="${VERSION#v}" ;;
         --image=*) IMAGE_NAME="${arg#--image=}"; IMAGE_GIVEN=1 ;;
-        -h|--help) sed -n '2,28p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,30p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) fail "unknown option $arg (see --help)" ;;
     esac
 done

@@ -1,7 +1,5 @@
 # Self-hosting ServerOS
 
-> **Not available yet.** The official image (`ghcr.io/serveroshq/panel`) and the one-line install script aren't published yet. Until they are, the steps below work with the community edition you build yourself (see [Building the community edition yourself](#building-the-community-edition-yourself)).
-
 You can run the ServerOS panel on your own server, with Docker. It's the same panel as serveros.com, without the billing: every workspace on your install is active, with no plan, trial or card. You pay for the server; ServerOS costs nothing.
 
 ## Editions
@@ -36,16 +34,18 @@ Installing has two parts: putting ServerOS on the server, then setting it up in 
 
 ### With Docker (recommended)
 
-On the server, as root, from a checkout of the repository:
+On the server:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/serveroshq/panel/main/docker/self-hosted/install.sh | sudo bash -s -- --domain=panel.example.com --email=you@example.com
+```
+
+That runs the official image. Leave out `--domain` and `--email` and it asks for them. To read the script first, it's [docker/self-hosted/install.sh](../docker/self-hosted/install.sh); it does the same from a checkout (`sudo bash docker/self-hosted/install.sh --domain=… --email=…`).
+
+To run the community edition instead, build it on the server (see [Building the community edition yourself](#building-the-community-edition-yourself)) and point the script at it with `--image` and `--version` (any name and tag you built it as):
 
 ```sh
 git clone https://github.com/serveroshq/panel.git && cd panel
-sudo bash docker/self-hosted/install.sh --domain=panel.example.com --email=you@example.com
-```
-
-That runs the official image. Until it's published, build the community edition on the server first (see [Building the community edition yourself](#building-the-community-edition-yourself)) and point the script at it with `--image` and `--version` (any name and tag you built it as):
-
-```sh
 docker build -f docker/self-hosted/Dockerfile -t serveros/panel:dev .
 sudo bash docker/self-hosted/install.sh --domain=panel.example.com --email=you@example.com --image=serveros/panel --version=dev
 ```
