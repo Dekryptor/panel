@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
-import { ChevronDown, PanelLeft, PinOff, Search } from '@lucide/vue';
+import { ArrowUpRight, PanelLeft, PinOff, Search } from '@lucide/vue';
 import {
     computed,
     nextTick,
@@ -19,7 +19,14 @@ import type { WorkspaceNavItem } from '@/components/workspace/workspaceNav';
 import { useAssistant } from '@/composables/useAssistant';
 import { usePinnedWorkspaces } from '@/composables/usePinnedWorkspaces';
 import { useWorkspaceSwitch } from '@/composables/useWorkspaceSwitch';
-import { SolarAskAi } from '@/lib/solarIcons';
+import { useWhatsNew } from '@/composables/useWhatsNew';
+import { docsUrl } from '@/lib/docs';
+import {
+    SolarAskAi,
+    SolarBookOpen,
+    SolarSupport,
+    SolarWhatsNew,
+} from '@/lib/solarIcons';
 import { workspaceInitial, workspaceTileColor } from '@/lib/workspaceTile';
 import type { Workspace, WorkspaceSummary } from '@/types';
 
@@ -108,28 +115,28 @@ const groups = computed<Group[]>(() => {
             .map(toRow);
 
     return [
-        { key: 'start', label: null, rows: [...rowsIn('start'), askRow] },
+        {
+            key: 'start',
+            label: null,
+            rows: rowsIn('start'),
+        },
         { key: 'servers', label: 'Servers', rows: rowsIn('servers') },
         { key: 'operations', label: 'Operations', rows: rowsIn('operations') },
         { key: 'workspace', label: 'Workspace', rows: rowsIn('workspace') },
     ].filter((group) => group.rows.length > 0);
 });
 
-const GROUPS_KEY = 'workspace-sidebar-groups';
+const GROUPS_KEY = 'workspace-sidebar-closed';
 const closedGroups = ref<string[]>([]);
 
-function groupOpen(group: Group): boolean {
-    return (
-        collapsed ||
-        !closedGroups.value.includes(group.key) ||
-        group.rows.some((row) => row.item?.active)
-    );
+function isOpen(key: string): boolean {
+    return collapsed || !closedGroups.value.includes(key);
 }
 
 function toggleGroup(key: string): void {
-    closedGroups.value = closedGroups.value.includes(key)
-        ? closedGroups.value.filter((k) => k !== key)
-        : [...closedGroups.value, key];
+    closedGroups.value = isOpen(key)
+        ? [...closedGroups.value, key]
+        : closedGroups.value.filter((k) => k !== key);
 
     try {
         window.localStorage.setItem(
@@ -140,8 +147,45 @@ function toggleGroup(key: string): void {
 }
 
 const allRows = computed(() =>
-    groups.value.filter(groupOpen).flatMap((group) => group.rows),
+    groups.value
+        .filter((group) => isOpen(group.key))
+        .flatMap((group) => group.rows),
 );
+
+const whatsNew = useWhatsNew();
+
+const supportLinks = computed(() => {
+    const extensionNav =
+        (
+            page.props as {
+                extensions?: {
+                    nav: { key: string; label: string; path: string }[];
+                } | null;
+            }
+        ).extensions?.nav ?? [];
+    const support = extensionNav.find((item) => item.key === 'support');
+
+    return [
+        {
+            key: 'docs',
+            label: trans('Docs'),
+            icon: SolarBookOpen,
+            href: docsUrl(page.props.docsUrl),
+            external: true,
+        },
+        ...(support
+            ? [
+                  {
+                      key: 'support',
+                      label: trans('Support'),
+                      icon: SolarSupport,
+                      href: support.path,
+                      external: false,
+                  },
+              ]
+            : []),
+    ];
+});
 
 type Box = { top: number; left: number; width: number; height: number };
 
@@ -216,10 +260,12 @@ let stopFinish: (() => void) | undefined;
 
 onMounted(async () => {
     try {
-        const saved = JSON.parse(
+        const saved: unknown = JSON.parse(
             window.localStorage.getItem(GROUPS_KEY) ?? '[]',
         );
-        closedGroups.value = Array.isArray(saved) ? saved : [];
+        closedGroups.value = Array.isArray(saved)
+            ? saved.filter((k): k is string => typeof k === 'string')
+            : [];
     } catch {}
 
     await nextTick();
@@ -253,27 +299,16 @@ const focusRing =
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring)';
 
 const rowClass =
-    'sidebar-item flex h-7.5 w-full items-center gap-2.5 rounded-[7px] text-[14px]/5 transition-colors duration-200';
+    'sidebar-item flex h-8 w-full items-center gap-2.5 rounded-[8px] text-[14px]/5 transition-colors duration-200';
 </script>
 
 <template>
-    <div class="flex h-full flex-col py-3 font-ui text-(--ds-text)">
+    <div class="flex h-full flex-col pb-2 font-ui text-(--ds-text)">
         <div
             v-if="!collapsed"
-            class="flex h-8 shrink-0 items-center gap-1 pr-2 pl-2.5"
+            class="flex h-14 shrink-0 items-center gap-1 pr-2.5 pl-2"
         >
             <WorkspaceMenu class="flex min-w-0 flex-1" />
-            <button
-                type="button"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
-                :class="focusRing"
-                :aria-label="$t('Search')"
-                :title="$t('Search (⌘K)')"
-                aria-haspopup="dialog"
-                @click="emit('search')"
-            >
-                <Search class="mi-tilt size-4" :stroke-width="1.6" />
-            </button>
             <button
                 v-if="collapsible"
                 type="button"
@@ -285,9 +320,35 @@ const rowClass =
             >
                 <PanelLeft class="mi-panel size-4" :stroke-width="1.6" />
             </button>
+            <button
+                type="button"
+                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                :class="focusRing"
+                :aria-label="$t('Search')"
+                :title="$t('Search (⌘K)')"
+                aria-haspopup="dialog"
+                @click="emit('search')"
+            >
+                <Search class="size-4" :stroke-width="1.75" />
+            </button>
+            <button
+                type="button"
+                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] bg-(--ds-card) text-(--ds-text) shadow-[0_0_0_1px_var(--ds-border-strong),0_1px_2px_rgb(0_0_0/0.08)] transition-colors duration-150 hover:bg-(--ds-hover)"
+                :class="focusRing"
+                :aria-label="$t('Ask AI')"
+                :title="$t('Ask AI (⌘J)')"
+                aria-controls="assistant-panel"
+                :aria-expanded="assistant.open.value"
+                @click="openAssistant"
+            >
+                <SolarAskAi class="size-4" :stroke-width="1.75" />
+            </button>
         </div>
 
-        <div v-else class="flex h-8 shrink-0 justify-center">
+        <div
+            v-else
+            class="flex h-14 shrink-0 items-center justify-center border-b border-(--ds-border)"
+        >
             <button
                 type="button"
                 class="group flex size-8 cursor-pointer items-center justify-center rounded-[8px] hover:bg-(--ds-hover)"
@@ -327,7 +388,7 @@ const rowClass =
 
         <nav
             class="min-h-0 grow overflow-y-auto"
-            :class="collapsed ? 'mt-3' : 'mt-4'"
+            :class="collapsed ? 'mt-3' : 'mt-1'"
             :aria-label="$t('Workspace')"
         >
             <div
@@ -353,35 +414,34 @@ const rowClass =
                 />
 
                 <template v-for="(group, index) in groups" :key="group.key">
-                    <h2 v-if="group.label && !collapsed" class="mt-5 mb-1.5">
+                    <h2 v-if="group.label && !collapsed" class="mt-5 mb-0.5">
                         <button
                             type="button"
-                            class="group/head flex w-full cursor-pointer items-center justify-between rounded-md px-2.5 py-0.5 text-[12.5px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
                             :class="focusRing"
-                            :aria-expanded="groupOpen(group)"
+                            :aria-expanded="isOpen(group.key)"
                             @click="toggleGroup(group.key)"
                         >
                             {{ $t(group.label) }}
-                            <ChevronDown
-                                class="size-3.5 opacity-0 transition-[transform,opacity] duration-200 group-hover/head:opacity-100 group-focus-visible/head:opacity-100"
-                                :class="{
-                                    '-rotate-90 opacity-100': !groupOpen(group),
-                                }"
-                                :stroke-width="1.75"
-                            />
+                            <svg
+                                viewBox="0 0 8 8"
+                                class="size-2 transition-transform duration-150"
+                                :class="{ '-rotate-90': !isOpen(group.key) }"
+                                aria-hidden="true"
+                            >
+                                <path d="M1 2.5h6L4 6z" fill="currentColor" />
+                            </svg>
                         </button>
                     </h2>
                     <div
-                        v-else-if="index > 0"
+                        v-else-if="index > 0 && collapsed"
                         class="mx-2 my-3 border-t border-(--ds-divider)"
                         aria-hidden="true"
                     />
                     <ul
-                        v-if="groupOpen(group)"
-                        class="flex flex-col gap-px"
-                        :class="{
-                            'sidebar-tree': group.label && !collapsed,
-                        }"
+                        v-if="isOpen(group.key)"
+                        class="flex flex-col gap-0.5"
+                        :class="{ 'mt-2': !group.label && !collapsed }"
                     >
                         <li
                             v-for="row in group.rows"
@@ -553,6 +613,91 @@ const rowClass =
                 </ul>
             </section>
         </nav>
+
+        <section
+            v-if="!collapsed"
+            class="mx-2 mb-2 shrink-0"
+            aria-labelledby="sidebar-support"
+        >
+            <h2 id="sidebar-support" class="mb-0.5">
+                <button
+                    type="button"
+                    class="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
+                    :class="focusRing"
+                    :aria-expanded="isOpen('help')"
+                    @click="toggleGroup('help')"
+                >
+                    {{ $t('Help') }}
+                    <svg
+                        viewBox="0 0 8 8"
+                        class="size-2 transition-transform duration-150"
+                        :class="{ '-rotate-90': !isOpen('help') }"
+                        aria-hidden="true"
+                    >
+                        <path d="M1 2.5h6L4 6z" fill="currentColor" />
+                    </svg>
+                </button>
+            </h2>
+            <ul v-if="isOpen('help')" class="flex flex-col gap-0.5">
+                <li v-for="link in supportLinks" :key="link.key">
+                    <a
+                        v-if="link.external"
+                        :href="link.href"
+                        target="_blank"
+                        rel="noopener"
+                        class="group/link px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                        :class="[rowClass, focusRing]"
+                    >
+                        <component
+                            :is="link.icon"
+                            class="size-4 shrink-0 text-(--ds-text-muted)"
+                            :stroke-width="1.6"
+                        />
+                        {{ link.label }}
+                        <ArrowUpRight
+                            class="ml-auto size-3.5 text-(--ds-text-faint) opacity-0 group-hover/link:opacity-100"
+                            :stroke-width="1.75"
+                        />
+                    </a>
+                    <Link
+                        v-else
+                        :href="link.href"
+                        class="px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                        :class="[rowClass, focusRing]"
+                    >
+                        <component
+                            :is="link.icon"
+                            class="size-4 shrink-0 text-(--ds-text-muted)"
+                            :stroke-width="1.6"
+                        />
+                        {{ link.label }}
+                    </Link>
+                </li>
+                <li>
+                    <button
+                        type="button"
+                        class="cursor-pointer px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                        :class="[rowClass, focusRing]"
+                        @click="whatsNew.show()"
+                    >
+                        <SolarWhatsNew
+                            class="size-4 shrink-0 text-(--ds-text-muted)"
+                            :stroke-width="1.6"
+                        />
+                        {{ $t('What’s new') }}
+                        <span
+                            v-if="whatsNew.unread.value"
+                            class="ml-auto rounded-full bg-(--ds-blue) px-1.5 font-ui-mono text-[10px]/4 text-white"
+                            >{{
+                                whatsNew.unread.value > 9
+                                    ? '9+'
+                                    : whatsNew.unread.value
+                            }}</span
+                        >
+                    </button>
+                </li>
+            </ul>
+        </section>
 
         <div
             class="shrink-0 px-2"

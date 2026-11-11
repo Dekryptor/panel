@@ -2650,26 +2650,6 @@ html.dark
     }
 }
 
-.sidebar-tree {
-    position: relative;
-    margin-left: 18px;
-    padding-left: 10px;
-
-    &::before {
-        position: absolute;
-        top: 0;
-        bottom: 15px;
-        left: 0;
-        width: 1px;
-        background-color: var(--ds-border-strong);
-        content: '';
-    }
-
-    & > li {
-        position: relative;
-    }
-}
-
 .ds-pill {
     display: inline-flex;
     align-items: center;
@@ -2764,4 +2744,13 @@ html.dark
     color: var(--ds-text-muted);
     font-size: 13px;
     line-height: 20px;
+}
+
+.sidebar-pill--active {
+    background-color: var(--ds-active);
+    box-shadow: none;
+}
+
+.dark .sidebar-pill--active {
+    box-shadow: none;
 }
