@@ -2820,3 +2820,5 @@ html.dark
 .sidebar-pill--hover {
     border-radius: 10px;
 }
+
+@package-css 'panel-art.css';
