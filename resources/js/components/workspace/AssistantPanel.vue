@@ -282,12 +282,8 @@ const focusRing =
         >
             <div
                 v-if="empty"
-                class="relative isolate mx-auto flex min-h-full w-full max-w-[720px] flex-col justify-end pb-4"
+                class="mx-auto flex min-h-full w-full max-w-[720px] flex-col justify-end pb-4"
             >
-                <div
-                    class="panel-art-assistant pointer-events-none absolute inset-x-[-1rem] top-0 bottom-[42%] -z-10"
-                    aria-hidden="true"
-                />
                 <p class="text-[20px]/7 font-medium tracking-[-0.01em]">
                     {{ ' ' + $t('What can I do for you?') + ' ' }}
                 </p>

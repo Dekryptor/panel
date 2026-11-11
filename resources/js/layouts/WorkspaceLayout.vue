@@ -3,7 +3,6 @@ import SubscriptionBanner from '@/components/workspace/SubscriptionBanner.vue';
 import { useSubscriptionNotice } from '@/composables/useSubscriptionNotice';
 import { usePage } from '@inertiajs/vue3';
 import {
-    computed,
     defineAsyncComponent,
     onBeforeUnmount,
     onMounted,
@@ -39,10 +38,6 @@ const WhatsNewDialog = defineAsyncComponent(
 );
 
 const subscriptionNotice = useSubscriptionNotice();
-
-const artKey = computed(() =>
-    usePage().component === 'workspace/Home' ? 'home' : 'page',
-);
 usePanelUpdates();
 
 const page = usePage();
@@ -168,14 +163,6 @@ watch(
                     class="relative isolate flex min-h-0 min-w-0 flex-1 flex-col bg-(--ds-frame) lg:overflow-hidden lg:rounded-[14px] lg:shadow-[0_0_0_1px_var(--ds-border)] lg:dark:shadow-none"
                     :class="{ 'lg:ml-[3px]': layout === 'sidebar' }"
                 >
-                    <div
-                        class="panel-art pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-                        :class="`panel-art-${artKey}`"
-                        aria-hidden="true"
-                    >
-                        <div class="panel-art-image absolute inset-0" />
-                        <div class="panel-art-fade absolute inset-0" />
-                    </div>
                     <WorkspaceNavBar
                         :sidebar="layout === 'sidebar'"
                         @search="openSearch"

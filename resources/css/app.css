@@ -2907,5 +2907,3 @@ html.dark
     color: var(--ds-text-faint);
     font-size: 12px;
 }
-
-@package-css 'panel-art.css';
