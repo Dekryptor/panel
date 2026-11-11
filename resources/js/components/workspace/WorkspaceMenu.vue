@@ -1,33 +1,27 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
+import { usePage } from '@inertiajs/vue3';
+import { trans } from 'laravel-vue-i18n';
 import { Check, ChevronsUpDown, PinOff, Plus } from '@lucide/vue';
-import {
-    SolarPin as Pin,
-    SolarCreditCard as CreditCard,
-    SolarUserPlus as UserPlus,
-} from '@/lib/solarIcons';
+import { SolarPin as Pin } from '@/lib/solarIcons';
 import { computed, ref } from 'vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import CreateWorkspaceDialog from '@/components/workspace/CreateWorkspaceDialog.vue';
 import { usePinnedWorkspaces } from '@/composables/usePinnedWorkspaces';
-import { useUpgradeLink } from '@/composables/useUpgradeLink';
 import { useWorkspaceSwitch } from '@/composables/useWorkspaceSwitch';
 import { workspaceInitial, workspaceTileColor } from '@/lib/workspaceTile';
-import { onWorkspace } from '@/lib/workspaceRoute';
-import members from '@/routes/workspace/members';
 import type { Workspace, WorkspaceSummary } from '@/types';
+
+const { variant = 'inline' } = defineProps<{ variant?: 'inline' | 'block' }>();
 
 const page = usePage<{ workspace: Workspace }>();
 
 const current = computed(() => page.props.workspace);
 const { isPinned, toggle: togglePin } = usePinnedWorkspaces();
-const upgrade = useUpgradeLink();
 
 const workspaces = computed(() => {
     const all = page.props.workspaces;
@@ -50,6 +44,26 @@ const creating = ref(false);
 const { switchingTo, switchTo } = useWorkspaceSwitch();
 const shown = computed(() => switchingTo.value ?? current.value);
 
+const subline = computed(() => {
+    const billing = current.value.billing;
+
+    if (billing.onTrial && billing.trialDaysLeft !== null) {
+        return trans(':count days left in your trial', {
+            count: String(billing.trialDaysLeft),
+        });
+    }
+
+    return [
+        billing.planLabel,
+        trans(
+            billing.machineCount === 1 ? ':count machine' : ':count machines',
+            { count: String(billing.machineCount) },
+        ),
+    ]
+        .filter(Boolean)
+        .join(' · ');
+});
+
 function onSelect(workspace: WorkspaceSummary): void {
     if (workspace.id !== current.value.id) {
         switchTo(workspace);
@@ -64,7 +78,50 @@ const icon = 'size-4 shrink-0 text-(--ds-text-muted)';
 <template>
     <div class="min-w-0">
         <DropdownMenu>
-            <DropdownMenuTrigger as-child>
+            <DropdownMenuTrigger v-if="variant === 'block'" as-child>
+                <button
+                    type="button"
+                    class="group flex h-10 w-full min-w-0 cursor-pointer items-center gap-2 rounded-[12px] p-1 text-left transition-colors duration-150 hover:bg-(--ds-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring) data-[state=open]:bg-(--ds-hover)"
+                    :aria-label="
+                        $t('Switch workspace (current: :name)', {
+                            name: String(shown.name),
+                        })
+                    "
+                >
+                    <span
+                        class="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[10px] text-[13px]/4 font-semibold"
+                        :class="workspaceTileColor(shown.id)"
+                        aria-hidden="true"
+                    >
+                        <img
+                            v-if="shown.logoUrl"
+                            :src="shown.logoUrl"
+                            alt=""
+                            class="size-full object-cover"
+                        />
+                        <template v-else>{{
+                            workspaceInitial(shown.name)
+                        }}</template>
+                    </span>
+                    <span class="flex min-w-0 flex-1 flex-col">
+                        <span
+                            class="truncate text-[14px]/4.5 text-(--ds-text)"
+                            >{{
+                                switchingTo ? $t('Switching…') : shown.name
+                            }}</span
+                        >
+                        <span
+                            class="truncate text-[11.5px]/4 text-(--ds-text-muted)"
+                            >{{ subline }}</span
+                        >
+                    </span>
+                    <ChevronsUpDown
+                        class="mr-1 size-3.5 shrink-0 text-(--ds-text-faint) transition-colors group-hover:text-(--ds-text-muted)"
+                        :stroke-width="1.75"
+                    />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuTrigger v-else as-child>
                 <button
                     type="button"
                     class="group flex h-8 max-w-full min-w-0 cursor-pointer items-center gap-2 rounded-[8px] pr-1.5 pl-1.5 text-left transition-colors duration-150 hover:bg-(--ds-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring) data-[state=open]:bg-(--ds-hover)"
@@ -103,7 +160,7 @@ const icon = 'size-4 shrink-0 text-(--ds-text-muted)';
 
             <DropdownMenuContent
                 class="ds-modal w-56 rounded-[12px] p-1.5 font-ui"
-                side="bottom"
+                :side="variant === 'block' ? 'top' : 'bottom'"
                 align="start"
                 :side-offset="6"
             >
@@ -157,12 +214,7 @@ const icon = 'size-4 shrink-0 text-(--ds-text-muted)';
                     >
                         <button
                             type="button"
-                            class="pointer-events-auto flex size-6 cursor-pointer items-center justify-center rounded-md text-(--ds-text-faint) group-hover/row:opacity-100 hover:bg-(--ds-active) hover:text-(--ds-text) focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-(--ds-ring)"
-                            :class="
-                                isPinned(workspace)
-                                    ? 'opacity-100'
-                                    : 'opacity-0'
-                            "
+                            class="pointer-events-auto flex size-6 cursor-pointer items-center justify-center rounded-md text-(--ds-text-faint) opacity-0 group-hover/row:opacity-100 hover:bg-(--ds-active) hover:text-(--ds-text) focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-(--ds-ring)"
                             :aria-label="
                                 isPinned(workspace)
                                     ? $t('Unpin :name', {
@@ -209,23 +261,6 @@ const icon = 'size-4 shrink-0 text-(--ds-text-muted)';
                 >
                     <Plus :class="icon" :stroke-width="1.6" />
                     {{ $t('Create workspace') }}
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator class="-mx-1.5 my-1.5" />
-                <DropdownMenuItem as-child>
-                    <Link
-                        :href="onWorkspace(members.index(current.slug))"
-                        :class="row"
-                    >
-                        <UserPlus :class="icon" :stroke-width="1.6" />
-                        {{ $t('Invite members') }}
-                    </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem v-if="upgrade" as-child>
-                    <Link :href="upgrade.href" :class="row">
-                        <CreditCard :class="icon" :stroke-width="1.6" />
-                        {{ upgrade.label }}
-                    </Link>
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>

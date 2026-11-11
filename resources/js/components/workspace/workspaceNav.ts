@@ -33,6 +33,7 @@ import fixes from '@/routes/workspace/fixes';
 import workflows from '@/routes/workspace/workflows';
 import members from '@/routes/workspace/members';
 import settings from '@/routes/workspace/settings';
+import { useSettingsNav } from '@/components/workspace/settingsNav';
 import type { Workspace } from '@/types';
 
 const icons = {
@@ -57,6 +58,15 @@ export type WorkspaceNavItem = {
     href: NonNullable<InertiaLinkProps['href']> | null;
     active: boolean;
     group: WorkspaceNavGroup;
+    children?: WorkspaceNavChild[];
+};
+
+export type WorkspaceNavChild = {
+    key: string;
+    label: string;
+    icon: Component;
+    href: string;
+    active: boolean;
 };
 
 export type WorkspaceNavGroup =
@@ -71,6 +81,8 @@ export function useWorkspaceNav(): ComputedRef<WorkspaceNavItem[]> {
         workspace?: Workspace;
         extensions?: { nav: ExtensionNavItem[] } | null;
     }>();
+
+    const settingsNav = useSettingsNav();
 
     return computed(() => {
         const slug = page.props.workspace?.slug;
@@ -200,6 +212,16 @@ export function useWorkspaceNav(): ComputedRef<WorkspaceNavItem[]> {
                     page.component.startsWith('workspace/settings/') &&
                     page.component !== 'workspace/settings/Members',
                 group: 'workspace',
+                children: settingsNav.value
+                    .flatMap((group) => group.items)
+                    .filter((item) => item.key !== 'workspace/settings/Members')
+                    .map((item) => ({
+                        key: item.key,
+                        label: item.label,
+                        icon: item.icon,
+                        href: item.href,
+                        active: item.current,
+                    })),
             },
         ];
 

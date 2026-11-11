@@ -173,7 +173,7 @@ const emit = defineEmits<{ toggle: [] }>();
             role="cell"
         >
             {{
-                service.ports.length
+                service.ports?.length
                     ? service.ports.map((p) => `:${p}`).join(' ')
                     : '—'
             }}

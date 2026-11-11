@@ -60,6 +60,8 @@ test('connected machines turn onboarding into fleet stats', function () {
                 'busy' => 1,
                 'backedUp' => 2,
                 'cpuHistory' => array_fill(0, 12, null),
+                'cpuTimeline' => array_fill(0, 96, null),
+                'cpuRange' => '24h',
             ]));
 });
 
@@ -78,6 +80,28 @@ test('the CPU tile gets the last hour in 5-minute steps, averaged across machine
 
     $this->actingAs($workspace->owner)->get(homeUrl($workspace))->assertInertia(fn (Assert $page) => $page
         ->where('stats.cpuHistory', [null, null, null, null, null, null, null, null, null, 70, null, 20]));
+});
+
+test('the CPU chart covers the range asked for, from the last hour to 30 days', function () {
+    $this->travelTo(now()->setTimestamp(1_800_000_000));
+    $workspace = Workspace::factory()->create();
+    $machine = Machine::factory()->for($workspace)->create();
+    $now = now()->getTimestamp();
+    MachineSample::query()->create(['machine_id' => $machine->id, 'ts' => $now - 20 * 86400, 'samples' => 1, 'cpu' => 40, 'cpu_max' => 40]);
+
+    $timeline = function (string $query) use ($workspace): array {
+        $timeline = null;
+        $this->actingAs($workspace->owner)->get(homeUrl($workspace).$query)->assertInertia(function (Assert $page) use (&$timeline) {
+            $timeline = $page->toArray()['props']['stats']['cpuTimeline'];
+        });
+
+        return $timeline;
+    };
+
+    expect($timeline('?range=1h'))->toHaveCount(60)->each->toBeNull()
+        ->and($timeline('?range=7d'))->toHaveCount(84)->each->toBeNull()
+        ->and(array_values(array_filter($timeline('?range=30d'))))->toBe([40])
+        ->and($timeline('?range=forever'))->toHaveCount(96);
 });
 
 test('what needs attention is listed worst first, in plain words', function () {

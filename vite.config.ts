@@ -284,6 +284,9 @@ const packageFonts = packages.flatMap((path) => {
 function withPackageFonts(own: FontDefinition[]): FontDefinition[] {
     const fonts = [...own];
     for (const { after, font } of packageFonts) {
+        if (fonts.some(({ family }) => family === font.family)) {
+            continue;
+        }
         const at = fonts.findIndex(({ family }) => family === after);
         fonts.splice(at < 0 ? fonts.length : at + 1, 0, font);
     }
@@ -442,6 +445,7 @@ export default defineConfig({
                 webFont('Schibsted Grotesk', [400, 500]),
                 webFont('Cabin', [400, 500]),
                 webFont('Mona Sans', [400, 500, 600], [400, 500]),
+                webFont('Geist', [400, 500, 600], [400, 500]),
                 webFont('Geist Mono', [400, 500]),
                 webFont('Inter', [400, 500, 600]),
             ]),

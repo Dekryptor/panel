@@ -10,7 +10,7 @@ defineProps<Props>();
 
 <template>
     <div
-        class="workspace-panel @container mx-auto flex min-h-full w-full max-w-[1320px] flex-col px-4 pt-9 pb-12 font-ui text-(--ds-text) sm:px-8"
+        class="workspace-panel @container flex min-h-full w-full flex-col px-4 pt-8 pb-12 font-ui text-(--ds-text) sm:px-8"
         :class="toolbar ? 'gap-4' : 'gap-6'"
     >
         <header class="flex flex-col gap-5">

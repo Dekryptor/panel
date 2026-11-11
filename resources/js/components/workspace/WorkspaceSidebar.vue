@@ -107,14 +107,42 @@ const groups = computed<Group[]>(() => {
             .map(toRow);
 
     return [
-        { key: 'start', label: null, rows: [...rowsIn('start'), askRow] },
+        {
+            key: 'start',
+            label: null,
+            rows: [...rowsIn('start'), askRow],
+        },
         { key: 'servers', label: 'Servers', rows: rowsIn('servers') },
         { key: 'operations', label: 'Operations', rows: rowsIn('operations') },
         { key: 'workspace', label: 'Workspace', rows: rowsIn('workspace') },
     ].filter((group) => group.rows.length > 0);
 });
 
-const allRows = computed(() => groups.value.flatMap((group) => group.rows));
+const GROUPS_KEY = 'workspace-sidebar-closed';
+const closedGroups = ref<string[]>([]);
+
+function isOpen(key: string): boolean {
+    return collapsed || !closedGroups.value.includes(key);
+}
+
+function toggleGroup(key: string): void {
+    closedGroups.value = isOpen(key)
+        ? [...closedGroups.value, key]
+        : closedGroups.value.filter((k) => k !== key);
+
+    try {
+        window.localStorage.setItem(
+            GROUPS_KEY,
+            JSON.stringify(closedGroups.value),
+        );
+    } catch {}
+}
+
+const allRows = computed(() =>
+    groups.value
+        .filter((group) => isOpen(group.key))
+        .flatMap((group) => group.rows),
+);
 
 type Box = { top: number; left: number; width: number; height: number };
 
@@ -158,7 +186,12 @@ const currentKey = computed(() => {
         return askRow.key;
     }
 
-    return allRows.value.find((row) => row.item?.active)?.key;
+    const row = allRows.value.find((row) => row.item?.active);
+    const child = collapsed
+        ? undefined
+        : row?.item?.children?.find((child) => child.active);
+
+    return child ? `${row?.key}/${child.key}` : row?.key;
 });
 
 function pillStyle(key: string | null | undefined): Record<string, string> {
@@ -188,6 +221,15 @@ let observer: ResizeObserver | undefined;
 let stopFinish: (() => void) | undefined;
 
 onMounted(async () => {
+    try {
+        const saved: unknown = JSON.parse(
+            window.localStorage.getItem(GROUPS_KEY) ?? '[]',
+        );
+        closedGroups.value = Array.isArray(saved)
+            ? saved.filter((k): k is string => typeof k === 'string')
+            : [];
+    } catch {}
+
     await nextTick();
     measure();
     requestAnimationFrame(() => (activeReady.value = true));
@@ -208,7 +250,7 @@ onBeforeUnmount(() => {
 });
 
 watch(
-    () => [collapsed, allRows.value.length],
+    () => [collapsed, allRows.value.length, closedGroups.value.length],
     async () => {
         await nextTick();
         measure();
@@ -219,31 +261,45 @@ const focusRing =
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring)';
 
 const rowClass =
-    'sidebar-item flex h-7.5 w-full items-center gap-2.5 rounded-[7px] text-[14px]/5 transition-colors duration-200';
+    'sidebar-item flex h-8 w-full items-center gap-2 rounded-[10px] text-[14px]/5 tracking-[-0.006em] transition-colors duration-200';
 </script>
 
 <template>
-    <div class="flex h-full flex-col py-3 font-ui text-(--ds-text)">
+    <div class="flex h-full flex-col font-ui text-(--ds-text)">
         <div
             v-if="!collapsed"
-            class="flex h-8 shrink-0 items-center gap-1 pr-2 pl-2.5"
+            class="flex h-8 shrink-0 items-center gap-0.5 pr-0.5 pl-3"
         >
-            <WorkspaceMenu class="flex min-w-0 flex-1" />
+            <a
+                :href="page.props.appUrl"
+                class="mr-auto flex min-w-0 items-center gap-2 rounded-md"
+                :class="focusRing"
+            >
+                <img
+                    src="/images/landing/serveros-logo.svg"
+                    alt=""
+                    class="size-[18px] shrink-0 object-contain invert dark:invert-0"
+                />
+                <span
+                    class="truncate text-[15px]/5 font-semibold tracking-[-0.02em]"
+                    >{{ page.props.name }}</span
+                >
+            </a>
             <button
                 type="button"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                class="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
                 :class="focusRing"
                 :aria-label="$t('Search')"
                 :title="$t('Search (⌘K)')"
                 aria-haspopup="dialog"
                 @click="emit('search')"
             >
-                <Search class="mi-tilt size-4" :stroke-width="1.6" />
+                <Search class="size-4" :stroke-width="1.75" />
             </button>
             <button
                 v-if="collapsible"
                 type="button"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                class="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
                 :class="focusRing"
                 :aria-label="$t('Collapse sidebar')"
                 aria-expanded="true"
@@ -253,7 +309,7 @@ const rowClass =
             </button>
         </div>
 
-        <div v-else class="flex h-8 shrink-0 justify-center">
+        <div v-else class="flex h-8 shrink-0 items-center justify-center">
             <button
                 type="button"
                 class="group flex size-8 cursor-pointer items-center justify-center rounded-[8px] hover:bg-(--ds-hover)"
@@ -293,7 +349,7 @@ const rowClass =
 
         <nav
             class="min-h-0 grow overflow-y-auto"
-            :class="collapsed ? 'mt-3' : 'mt-4'"
+            :class="collapsed ? 'mt-3' : 'mt-1'"
             :aria-label="$t('Workspace')"
         >
             <div
@@ -319,100 +375,195 @@ const rowClass =
                 />
 
                 <template v-for="(group, index) in groups" :key="group.key">
-                    <h2
-                        v-if="group.label && !collapsed"
-                        class="mt-5 mb-1.5 px-2.5 text-[13px]/4 text-(--ds-text-faint)"
-                    >
-                        {{ $t(group.label) }}
+                    <div
+                        v-if="index === 1 && !collapsed"
+                        class="mx-1 mt-3 h-px bg-(--ds-divider)"
+                        aria-hidden="true"
+                    />
+                    <h2 v-if="group.label && !collapsed" class="mt-4 mb-px">
+                        <button
+                            type="button"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
+                            :class="focusRing"
+                            :aria-expanded="isOpen(group.key)"
+                            @click="toggleGroup(group.key)"
+                        >
+                            {{ $t(group.label) }}
+                            <svg
+                                viewBox="0 0 8 8"
+                                class="size-2 transition-transform duration-150"
+                                :class="{ '-rotate-90': !isOpen(group.key) }"
+                                aria-hidden="true"
+                            >
+                                <path d="M1 2.5h6L4 6z" fill="currentColor" />
+                            </svg>
+                        </button>
                     </h2>
                     <div
-                        v-else-if="index > 0"
+                        v-else-if="index > 0 && collapsed"
                         class="mx-2 my-3 border-t border-(--ds-divider)"
                         aria-hidden="true"
                     />
-                    <ul class="flex flex-col gap-px">
-                        <li
-                            v-for="row in group.rows"
-                            :key="row.key"
-                            :ref="(el) => setItemEl(row.key, el)"
-                        >
-                            <button
-                                v-if="row.key === 'ask'"
-                                type="button"
-                                class="cursor-pointer"
-                                :class="[
-                                    rowClass,
-                                    collapsed
-                                        ? 'justify-center px-0'
-                                        : 'px-2.5',
-                                    currentKey === row.key
-                                        ? 'text-(--ds-text)'
-                                        : 'text-(--ds-text-secondary) hover:text-(--ds-text)',
-                                    focusRing,
-                                ]"
-                                :aria-expanded="assistant.open.value"
-                                aria-controls="assistant-panel"
-                                :aria-label="
-                                    collapsed ? $t('Ask AI') : undefined
-                                "
-                                :title="
-                                    collapsed ? $t('Ask AI (⌘J)') : undefined
-                                "
-                                @mouseenter="enter(row.key)"
-                                @click="openAssistant"
-                            >
-                                <component
-                                    :is="row.icon"
-                                    class="size-4 shrink-0 text-(--ds-text-muted)"
-                                    :stroke-width="1.6"
-                                />
-                                <template v-if="!collapsed">
-                                    <span class="truncate">{{
-                                        $t(row.label)
-                                    }}</span>
-                                    <kbd
-                                        class="ml-auto font-ui text-[11px]/3.5 text-(--ds-text-faint)"
-                                        >⌘J</kbd
-                                    >
-                                </template>
-                            </button>
-                            <Link
-                                v-else-if="row.item?.href"
-                                :href="row.item.href"
-                                :class="[
-                                    rowClass,
-                                    collapsed
-                                        ? 'justify-center px-0'
-                                        : 'px-2.5',
-                                    currentKey === row.key
-                                        ? 'text-(--ds-text)'
-                                        : 'text-(--ds-text-secondary) hover:text-(--ds-text)',
-                                    focusRing,
-                                ]"
-                                :aria-current="
-                                    row.item.active ? 'page' : undefined
-                                "
-                                :aria-label="
-                                    collapsed ? $t(row.label) : undefined
-                                "
-                                :title="collapsed ? $t(row.label) : undefined"
-                                @mouseenter="enter(row.key)"
-                                @click="pending = row.key"
-                            >
-                                <component
-                                    :is="row.icon"
-                                    class="size-4 shrink-0 transition-colors duration-200"
-                                    :class="
+                    <ul
+                        v-if="isOpen(group.key)"
+                        class="flex flex-col gap-0.5"
+                        :class="{ 'mt-2': !group.label && !collapsed }"
+                    >
+                        <li v-for="row in group.rows" :key="row.key">
+                            <div :ref="(el) => setItemEl(row.key, el)">
+                                <button
+                                    v-if="row.key === 'ask'"
+                                    type="button"
+                                    class="cursor-pointer"
+                                    :class="[
+                                        rowClass,
+                                        collapsed
+                                            ? 'justify-center px-0'
+                                            : 'px-2.5',
                                         currentKey === row.key
                                             ? 'text-(--ds-text)'
-                                            : 'text-(--ds-text-muted)'
+                                            : 'text-(--ds-text-secondary) hover:text-(--ds-text)',
+                                        focusRing,
+                                    ]"
+                                    :aria-expanded="assistant.open.value"
+                                    aria-controls="assistant-panel"
+                                    :aria-label="
+                                        collapsed ? $t('Ask AI') : undefined
                                     "
-                                    :stroke-width="1.6"
-                                />
-                                <span v-if="!collapsed" class="truncate">
-                                    {{ $t(row.label) }}
-                                </span>
-                            </Link>
+                                    :title="
+                                        collapsed
+                                            ? $t('Ask AI (⌘J)')
+                                            : undefined
+                                    "
+                                    @mouseenter="enter(row.key)"
+                                    @click="openAssistant"
+                                >
+                                    <component
+                                        :is="row.icon"
+                                        class="size-[15px] shrink-0 text-(--ds-text-muted)"
+                                        :stroke-width="1.6"
+                                    />
+                                    <template v-if="!collapsed">
+                                        <span class="truncate">{{
+                                            $t(row.label)
+                                        }}</span>
+                                        <kbd
+                                            class="ml-auto font-ui text-[11px]/3.5 text-(--ds-text-faint)"
+                                            >⌘J</kbd
+                                        >
+                                    </template>
+                                </button>
+                                <Link
+                                    v-else-if="row.item?.href"
+                                    :href="row.item.href"
+                                    :class="[
+                                        rowClass,
+                                        collapsed
+                                            ? 'justify-center px-0'
+                                            : 'px-2.5',
+                                        currentKey === row.key
+                                            ? 'text-(--ds-text)'
+                                            : 'text-(--ds-text-secondary) hover:text-(--ds-text)',
+                                        focusRing,
+                                    ]"
+                                    :aria-current="
+                                        row.item.active ? 'page' : undefined
+                                    "
+                                    :aria-label="
+                                        collapsed ? $t(row.label) : undefined
+                                    "
+                                    :title="
+                                        collapsed ? $t(row.label) : undefined
+                                    "
+                                    @mouseenter="enter(row.key)"
+                                    @click="pending = row.key"
+                                >
+                                    <component
+                                        :is="row.icon"
+                                        class="size-[15px] shrink-0 transition-colors duration-200"
+                                        :class="
+                                            currentKey === row.key
+                                                ? 'text-(--ds-text)'
+                                                : 'text-(--ds-text-muted)'
+                                        "
+                                        :stroke-width="1.6"
+                                    />
+                                    <span v-if="!collapsed" class="truncate">
+                                        {{ $t(row.label) }}
+                                    </span>
+                                    <svg
+                                        v-if="row.item.children && !collapsed"
+                                        viewBox="0 0 8 8"
+                                        class="size-2 shrink-0 text-(--ds-text-faint) transition-transform duration-150"
+                                        :class="{
+                                            '-rotate-90': !row.item.active,
+                                        }"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            d="M1 2.5h6L4 6z"
+                                            fill="currentColor"
+                                        />
+                                    </svg>
+                                </Link>
+                            </div>
+                            <ul
+                                v-if="
+                                    row.item?.children &&
+                                    row.item.active &&
+                                    !collapsed
+                                "
+                                class="mt-px flex flex-col gap-px"
+                            >
+                                <li
+                                    v-for="child in row.item.children"
+                                    :key="child.key"
+                                    :ref="
+                                        (el) =>
+                                            setItemEl(
+                                                `${row.key}/${child.key}`,
+                                                el,
+                                            )
+                                    "
+                                >
+                                    <Link
+                                        :href="child.href"
+                                        class="pr-2.5 pl-[33px]"
+                                        :class="[
+                                            rowClass,
+                                            currentKey ===
+                                            `${row.key}/${child.key}`
+                                                ? 'text-(--ds-text)'
+                                                : 'text-(--ds-text-muted) hover:text-(--ds-text)',
+                                            focusRing,
+                                        ]"
+                                        :aria-current="
+                                            child.active ? 'page' : undefined
+                                        "
+                                        @mouseenter="
+                                            enter(`${row.key}/${child.key}`)
+                                        "
+                                        @click="
+                                            pending = `${row.key}/${child.key}`
+                                        "
+                                    >
+                                        <component
+                                            :is="child.icon"
+                                            class="size-[15px] shrink-0"
+                                            :class="
+                                                currentKey ===
+                                                `${row.key}/${child.key}`
+                                                    ? 'text-(--ds-text)'
+                                                    : 'text-(--ds-text-muted)'
+                                            "
+                                            :stroke-width="1.6"
+                                        />
+                                        <span class="truncate">{{
+                                            child.label
+                                        }}</span>
+                                    </Link>
+                                </li>
+                            </ul>
                         </li>
                     </ul>
                 </template>
@@ -503,11 +654,16 @@ const rowClass =
         </nav>
 
         <div
-            class="shrink-0 px-2"
-            :class="{ 'flex justify-center': collapsed }"
+            class="flex shrink-0 items-center gap-1"
+            :class="collapsed ? 'flex-col justify-center' : 'pt-1'"
         >
+            <WorkspaceMenu
+                v-if="!collapsed"
+                variant="block"
+                class="flex min-w-0 flex-1"
+            />
             <AccountMenu
-                :display="collapsed ? 'avatar' : 'full'"
+                display="avatar"
                 :side="collapsed ? 'right' : 'top'"
                 :align="collapsed ? 'end' : 'start'"
             />

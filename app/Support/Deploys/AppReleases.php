@@ -67,6 +67,7 @@ final class AppReleases
             if ($release !== null && isset(self::live($machine)[$release['app']])) {
                 $service['app'] = $release['app'];
             }
+            $service['ports'] = is_array($service['ports'] ?? null) ? array_values($service['ports']) : [];
             $service['label'] = ServiceLabels::for($machine, $service);
             $service['found'] = ContainerNames::found($service);
             $service['icon'] = ServiceLabels::iconUrl($machine, $service);

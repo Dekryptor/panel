@@ -20,6 +20,8 @@ import {
     SolarServer as Server,
     SolarSparkles as Sparkles,
     SolarTerminal as Terminal,
+    SolarAskAi as AskAi,
+    SolarWorkflows as Workflows,
 } from '@/lib/solarIcons';
 import { computed, ref } from 'vue';
 import type { Component } from 'vue';
@@ -32,14 +34,19 @@ import AskAiButton from '@/components/workspace/AskAiButton.vue';
 import type { HealthIssue } from '@/lib/healthIssues';
 import ConnectMachineButton from '@/components/workspace/ConnectMachineButton.vue';
 import McpDialog from '@/components/workspace/McpDialog.vue';
+import DotMeter from '@/components/charts/DotMeter.vue';
+import RidgeChart from '@/components/charts/RidgeChart.vue';
 import SegmentedTabs from '@/components/workspace/SegmentedTabs.vue';
 import WorkspacePage from '@/components/workspace/WorkspacePage.vue';
+import { useAssistant } from '@/composables/useAssistant';
 import { useUpgradeLink } from '@/composables/useUpgradeLink';
 import { onWorkspace } from '@/lib/workspaceRoute';
 import workspaceRoutes from '@/routes/workspace';
 import backupsRoutes from '@/routes/workspace/backups';
 import machinesRoutes from '@/routes/workspace/machines';
 import membersRoutes from '@/routes/workspace/members';
+import servicesRoutes from '@/routes/workspace/services';
+import workflowsRoutes from '@/routes/workspace/workflows';
 import onboardingRoutes from '@/routes/workspace/onboarding';
 import type {
     OnboardingStep,
@@ -93,6 +100,10 @@ async function copyUrl(): Promise<void> {
 
 const hasMachines = computed(() => props.stats.machines > 0);
 
+const machinesHref = computed(() =>
+    onWorkspace(machinesRoutes.index(props.workspace.slug)),
+);
+
 const upgrade = useUpgradeLink();
 
 const tabs = computed(() => [
@@ -124,12 +135,6 @@ const tabs = computed(() => [
 
 type Chip = { text: string; tone: 'green' | 'amber' | 'red' };
 
-const chipTones: Record<Chip['tone'], string> = {
-    green: 'bg-(--ds-green)/15 text-(--ds-green)',
-    amber: 'bg-(--ds-amber)/15 text-(--ds-amber)',
-    red: 'bg-(--ds-red)/15 text-(--ds-red)',
-};
-
 const machineAllowance = computed(() => {
     const limit = props.workspace.billing.machineLimit;
     const license = props.licenseMachines;
@@ -155,62 +160,18 @@ const machineAllowance = computed(() => {
         : trans('of :limit on your plan', { limit: String(limit) });
 });
 
-type TileBars =
-    | { kind: 'segments'; total: number; lit: number; title: string }
-    | { kind: 'history'; values: (number | null)[]; title: string };
+const BUSY_CPU = 80;
 
-function segments(lit: number, total: number, title: string): TileBars {
-    return total <= 12
-        ? { kind: 'segments', total, lit, title }
-        : {
-              kind: 'segments',
-              total: 12,
-              lit: Math.round((lit / total) * 12),
-              title,
-          };
-}
+type Kpi = {
+    label: string;
+    value: string;
+    note: string;
+    noteTone: string;
+    href?: string;
+};
 
-const machineBars = computed<TileBars | undefined>(() => {
-    const machines = props.stats.machines;
-    const license = props.licenseMachines;
-    const limit = license
-        ? license.allowed
-        : props.workspace.billing.machineLimit;
-    if (limit === null || limit < 1) {
-        return undefined;
-    }
-    const title = license
-        ? trans(':count of :limit machines your license covers', {
-              count: String(machines),
-              limit: String(limit),
-          })
-        : props.workspace.billing.selfHosted
-          ? trans(':count of :limit machines this install allows', {
-                count: String(machines),
-                limit: String(limit),
-            })
-          : trans(':count of :limit machines your plan allows', {
-                count: String(machines),
-                limit: String(limit),
-            });
-
-    return segments(Math.min(machines, limit), limit, title);
-});
-
-const statTiles = computed<
-    {
-        label: string;
-        icon: Component;
-        value: string;
-        detail: string;
-        chip: Chip | null;
-        compact?: boolean;
-        muted?: boolean;
-        bars?: TileBars;
-        href?: string;
-    }[]
->(() => {
-    const { machines, averageCpu, busy, backedUp, cpuHistory } = props.stats;
+const kpis = computed<Kpi[]>(() => {
+    const { machines, services, averageCpu, busy, backedUp } = props.stats;
     const attention = props.issues.filter(
         (issue) => issue.severity !== 'notice',
     ).length;
@@ -219,99 +180,168 @@ const statTiles = computed<
     return [
         {
             label: trans('Machines'),
-            icon: Server,
             value: String(machines),
-            detail: machineAllowance.value,
-            chip: !hasMachines.value
-                ? null
-                : attention > 0
-                  ? {
-                        text: `${attention} ${attention === 1 ? trans('issue') : trans('issues')}`,
-                        tone: 'amber',
-                    }
-                  : { text: trans('Healthy'), tone: 'green' },
-            bars: machineBars.value,
+            note:
+                attention > 0
+                    ? trans(':count need attention', {
+                          count: String(attention),
+                      })
+                    : trans('healthy'),
+            noteTone:
+                attention > 0 ? 'text-(--ds-amber)' : 'text-(--ds-text-faint)',
+            href: machinesHref.value.url,
+        },
+        {
+            label: trans('Services'),
+            value: String(services),
+            note: trans('running'),
+            noteTone: 'text-(--ds-text-faint)',
+            href: onWorkspace(servicesRoutes.index(props.workspace.slug)).url,
         },
         {
             label: trans('Average CPU'),
-            icon: Cpu,
-            value: hasMachines.value ? `${averageCpu}%` : '—',
-            detail: hasMachines.value
-                ? trans(
-                      machines === 1
-                          ? 'across :count machine'
-                          : 'across :count machines',
-                      { count: String(machines) },
-                  )
-                : trans('no machines yet'),
-            chip:
+            value: `${averageCpu}%`,
+            note:
                 busy > 0
-                    ? {
-                          text: trans(':count busy', { count: String(busy) }),
-                          tone: 'amber',
-                      }
-                    : null,
-            muted: !hasMachines.value,
-            bars: hasMachines.value
-                ? {
-                      kind: 'history',
-                      values: cpuHistory,
-                      title: trans('Average CPU over the last hour'),
-                  }
-                : undefined,
+                    ? trans(':count busy', { count: String(busy) })
+                    : trans('normal'),
+            noteTone: busy > 0 ? 'text-(--ds-amber)' : 'text-(--ds-text-faint)',
         },
         {
-            label: trans('Last backup'),
-            icon: Archive,
-            value: props.lastBackup ?? trans('None yet'),
-            detail: hasMachines.value
-                ? trans(':backedUp of :machines covered', {
-                      backedUp: String(backedUp),
-                      machines: String(machines),
-                  })
-                : trans('nothing to back up'),
-            chip:
-                hasMachines.value && unprotected > 0
-                    ? {
-                          text: trans(':count unprotected', {
-                              count: String(unprotected),
-                          }),
-                          tone: 'red',
-                      }
-                    : null,
-            compact: true,
-            muted: props.lastBackup === null,
+            label: trans('Backups'),
+            value: `${backedUp}/${machines}`,
+            note:
+                unprotected > 0
+                    ? trans(':count unprotected', {
+                          count: String(unprotected),
+                      })
+                    : (props.lastBackup ?? ''),
+            noteTone:
+                unprotected > 0 ? 'text-(--ds-red)' : 'text-(--ds-text-faint)',
             href: onWorkspace(backupsRoutes.index(props.workspace.slug)).url,
-            bars: hasMachines.value
-                ? segments(
-                      backedUp,
-                      machines,
-                      trans(
-                          ':count of :total machines backed up in the last day',
-                          {
-                              count: String(backedUp),
-                              total: String(machines),
-                          },
-                      ),
-                  )
-                : undefined,
         },
     ];
 });
 
-const BUSY_CPU = 80;
+type CpuRange = WorkspaceStats['cpuRange'];
 
-function historyHeight(value: number, values: (number | null)[]): number {
-    const peak = Math.max(10, ...values.map((v) => v ?? 0));
+const cpuRanges: {
+    key: CpuRange;
+    label: string;
+    step: number;
+    span: string;
+    ticks: string[];
+}[] = [
+    {
+        key: '1h',
+        label: '1h',
+        step: 60_000,
+        span: trans('last hour'),
+        ticks: ['-60m', '-45m', '-30m', '-15m'],
+    },
+    {
+        key: '24h',
+        label: '24h',
+        step: 900_000,
+        span: trans('last 24 hours'),
+        ticks: ['-24h', '-18h', '-12h', '-6h'],
+    },
+    {
+        key: '7d',
+        label: '7d',
+        step: 7_200_000,
+        span: trans('last 7 days'),
+        ticks: ['-7d', '-5d', '-3.5d', '-2d'],
+    },
+    {
+        key: '30d',
+        label: '30d',
+        step: 28_800_000,
+        span: trans('last 30 days'),
+        ticks: ['-30d', '-22d', '-15d', '-7d'],
+    },
+];
 
-    return Math.max(15, Math.round((value / peak) * 100));
+const cpuRange = computed(
+    () =>
+        cpuRanges.find((range) => range.key === props.stats.cpuRange) ??
+        cpuRanges[1],
+);
+
+const loadingRange = ref<CpuRange | null>(null);
+
+function pickRange(key: CpuRange): void {
+    if (key === props.stats.cpuRange) return;
+    loadingRange.value = key;
+    router.reload({
+        data: { range: key },
+        only: ['stats'],
+        onFinish: () => (loadingRange.value = null),
+    });
 }
 
-function historyTone(value: number, index: number, count: number): string {
-    if (value >= BUSY_CPU) return 'bg-(--ds-amber)';
+const cpuLabels = computed(() => {
+    const now = Date.now();
+    const count = props.stats.cpuTimeline.length;
+    const { step } = cpuRange.value;
+    const short = step < 3_600_000;
 
-    return index === count - 1 ? 'bg-(--ds-green)' : 'bg-(--ds-green)/55';
-}
+    return props.stats.cpuTimeline.map((_, index) =>
+        new Date(now - (count - 1 - index) * step).toLocaleString(
+            [],
+            short
+                ? { hour: '2-digit', minute: '2-digit' }
+                : {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                  },
+        ),
+    );
+});
+
+const cpuTicks = computed(() => [
+    ...cpuRange.value.ticks.map((label, index) => ({
+        at: index / 4,
+        label,
+    })),
+    { at: 1, label: trans('now') },
+]);
+
+const connectionTone: Record<NonNullable<Machine['connection']>, string> = {
+    online: 'bg-(--ds-green)',
+    degraded: 'bg-(--ds-amber)',
+    offline: 'bg-(--ds-red)',
+    connecting: 'bg-(--ds-blue)',
+    demo: 'bg-(--ds-text-faint)',
+};
+
+const assistant = useAssistant();
+
+const quickActions = computed(() => [
+    {
+        label: trans('Deploy a service'),
+        icon: Rocket,
+        href: onWorkspace(servicesRoutes.index(props.workspace.slug)).url,
+    },
+    {
+        label: trans('Workflows'),
+        icon: Workflows,
+        href: onWorkspace(workflowsRoutes.index(props.workspace.slug)).url,
+    },
+    {
+        label: trans('Backups'),
+        icon: Archive,
+        href: onWorkspace(backupsRoutes.index(props.workspace.slug)).url,
+    },
+]);
+
+const envColors = [
+    'bg-[#3b7bff]',
+    'bg-(--ds-text-secondary)',
+    'bg-(--ds-text-faint)',
+];
 
 const environments = computed(() => {
     const { production, staging, development } = props.stats.environments;
@@ -325,6 +355,14 @@ const environments = computed(() => {
 
 const topProviders = computed(() => props.providers.slice(0, 4));
 
+const envMix = computed(() =>
+    environments.value.map((env, index) => ({
+        ...env,
+        color: envColors[index],
+        share: share(env.count),
+    })),
+);
+
 const fleetFacts = computed(() => [
     ...environments.value
         .filter((env) => env.count > 0)
@@ -337,16 +375,20 @@ function share(count: number): string {
     return `${Math.round((count / Math.max(props.stats.machines, 1)) * 100)}%`;
 }
 
-const machineList = computed(() => ({
-    title: trans('Machines'),
-    rows: props.machines.slice(0, 4).map((machine) => ({
-        machine,
-        text: trans('Backed up :lastBackup', {
-            lastBackup: String(machine.lastBackup),
-        }),
-        tone: 'text-(--ds-text-muted)',
-    })),
-}));
+const machineGroups = computed(() => {
+    const shown = props.machines.slice(0, 14);
+    const keys = ['production', 'staging', 'development'];
+
+    return environments.value
+        .map((env, index) => ({
+            key: keys[index],
+            label: env.label,
+            rows: shown.filter(
+                (machine) => machine.environment === keys[index],
+            ),
+        }))
+        .filter((group) => group.rows.length > 0);
+});
 
 const issuesOpen = ref(false);
 const shownIssues = computed(() =>
@@ -400,10 +442,6 @@ function since(iso: string | null): string | null {
 
     return `${Math.floor(seconds / 86400)} d`;
 }
-
-const machinesHref = computed(() =>
-    onWorkspace(machinesRoutes.index(props.workspace.slug)),
-);
 
 const stepTitles: Record<OnboardingStepKey, string> = {
     workspace: trans('Create your workspace'),
@@ -549,7 +587,7 @@ const focusRing =
             <ConnectMachineButton size="sm" />
         </template>
 
-        <div class="flex flex-col gap-5">
+        <div class="flex min-w-0 flex-col gap-5">
             <Link
                 v-if="fixesWaiting.length"
                 :href="`/fixes?fix=${fixesWaiting[0].id}`"
@@ -705,249 +743,449 @@ const focusRing =
                 </button>
             </section>
 
-            <ul class="grid gap-3 md:grid-cols-3" :aria-label="$t('Status')">
-                <li
-                    v-for="tile in statTiles"
-                    :key="tile.label"
-                    class="ds-tile relative flex min-h-30 min-w-0 flex-col gap-4 px-4 py-3.5"
-                    :class="{
-                        'transition-colors hover:bg-(--ds-row-hover)':
-                            tile.href,
-                    }"
-                >
-                    <div class="flex items-start justify-between gap-3">
-                        <h2
-                            class="text-[13.5px]/5 font-medium text-(--ds-text-muted)"
-                        >
-                            <Link
-                                v-if="tile.href"
-                                :href="tile.href"
-                                class="after:absolute after:inset-0 after:rounded-[inherit] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-(--ds-ring)"
-                                >{{ tile.label }}</Link
-                            >
-                            <template v-else>{{ tile.label }}</template>
-                        </h2>
-                        <span class="text-(--ds-text-faint)" aria-hidden="true">
-                            <component
-                                :is="tile.icon"
-                                class="size-4"
-                                :stroke-width="1.75"
-                            />
-                        </span>
-                    </div>
-                    <div class="flex items-end justify-between gap-3">
-                        <div class="min-w-0">
-                            <p
-                                class="truncate font-semibold tracking-[-0.035em] tabular-nums"
-                                :class="[
-                                    tile.compact
-                                        ? 'text-[22px]/8'
-                                        : 'text-[28px]/8',
-                                    tile.muted
-                                        ? 'text-(--ds-text-muted)'
-                                        : 'text-(--ds-text)',
-                                ]"
-                            >
-                                {{ tile.value }}
-                            </p>
-                            <p
-                                class="mt-1 truncate text-[13px]/5 text-(--ds-text-faint)"
-                            >
-                                {{ tile.detail }}
-                            </p>
-                        </div>
-                        <div
-                            v-if="tile.bars"
-                            class="relative z-10 hidden h-7 shrink-0 items-end gap-1 pb-1 sm:flex"
-                            :title="tile.bars.title"
-                            :aria-label="tile.bars.title"
-                            role="img"
-                        >
-                            <template v-if="tile.bars.kind === 'history'">
-                                <span
-                                    v-for="(value, index) in tile.bars.values"
-                                    :key="index"
-                                    class="relative h-5 w-1.5 overflow-hidden rounded-sm bg-(--ds-border-strong)"
-                                >
-                                    <span
-                                        v-if="value !== null"
-                                        class="absolute inset-x-0 bottom-0 rounded-sm"
-                                        :class="
-                                            historyTone(
-                                                value,
-                                                index,
-                                                tile.bars.values.length,
-                                            )
-                                        "
-                                        :style="{
-                                            height: `${historyHeight(value, tile.bars.values)}%`,
-                                        }"
-                                    />
-                                </span>
-                            </template>
-                            <template v-else>
-                                <span
-                                    v-for="segment in tile.bars.total"
-                                    :key="segment"
-                                    class="h-5 w-1.5 rounded-sm"
-                                    :class="
-                                        segment <= tile.bars.lit
-                                            ? 'bg-(--ds-green)'
-                                            : 'bg-(--ds-border-strong)'
-                                    "
-                                />
-                            </template>
-                        </div>
-                    </div>
-                    <span
-                        v-if="tile.chip"
-                        class="w-fit rounded-full px-2 py-0.5 text-xs/4 font-semibold tabular-nums"
-                        :class="chipTones[tile.chip.tone]"
-                        >{{ tile.chip.text }}</span
-                    >
-                </li>
-            </ul>
-
             <section
                 v-if="hasMachines"
-                class="flex flex-col gap-3"
-                aria-labelledby="list-heading"
+                class="ds-tile overflow-hidden"
+                :aria-label="$t('Status')"
             >
-                <div class="flex items-end justify-between gap-4">
-                    <div class="flex min-w-0 flex-col gap-0.5">
+                <dl
+                    class="grid border-b border-(--ds-divider) sm:grid-cols-2 xl:grid-cols-4"
+                >
+                    <div
+                        v-for="kpi in kpis"
+                        :key="kpi.label"
+                        class="relative flex min-w-0 flex-col gap-1.5 border-(--ds-divider) px-5 py-4 not-first:max-sm:border-t sm:even:border-l xl:not-first:border-l sm:[&:nth-child(n+3)]:max-xl:border-t"
+                    >
+                        <dt
+                            class="font-ui-mono text-[10.5px]/4 tracking-[0.08em] text-(--ds-text-faint) uppercase"
+                        >
+                            <Link
+                                v-if="kpi.href"
+                                :href="kpi.href"
+                                class="after:absolute after:inset-0 hover:text-(--ds-text) focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-(--ds-ring)"
+                                >{{ kpi.label }}</Link
+                            >
+                            <template v-else>{{ kpi.label }}</template>
+                        </dt>
+                        <dd class="flex items-baseline gap-2 font-ui-mono">
+                            <span
+                                class="text-[22px]/7 font-medium tracking-[-0.03em] tabular-nums"
+                                >{{ kpi.value }}</span
+                            >
+                            <span
+                                class="truncate text-[11px]/4 uppercase"
+                                :class="kpi.noteTone"
+                                >{{ kpi.note }}</span
+                            >
+                        </dd>
+                    </div>
+                </dl>
+                <div class="px-5 pt-4 pb-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <p
+                            class="font-ui-mono text-[10.5px]/4 tracking-[0.08em] text-(--ds-text-faint) uppercase"
+                        >
+                            {{
+                                $t('CPU · :count machines · :span', {
+                                    count: String(stats.machines),
+                                    span: cpuRange.span,
+                                })
+                            }}
+                        </p>
+                        <div
+                            class="flex items-center gap-0.5 font-ui-mono text-[10.5px]/4 tracking-[0.06em] uppercase"
+                            role="group"
+                            :aria-label="$t('Time range')"
+                        >
+                            <button
+                                v-for="range in cpuRanges"
+                                :key="range.key"
+                                type="button"
+                                class="cursor-pointer rounded-[6px] px-2 py-1 transition-colors"
+                                :class="[
+                                    range.key === stats.cpuRange
+                                        ? 'bg-(--ds-active) text-(--ds-text)'
+                                        : 'text-(--ds-text-faint) hover:text-(--ds-text)',
+                                    loadingRange === range.key &&
+                                        'animate-pulse',
+                                    focusRing,
+                                ]"
+                                :aria-pressed="range.key === stats.cpuRange"
+                                @click="pickRange(range.key)"
+                            >
+                                {{ range.label }}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-3 h-64">
+                        <RidgeChart
+                            :values="stats.cpuTimeline"
+                            :labels="cpuLabels"
+                            :ticks="cpuTicks"
+                            :threshold="{
+                                value: BUSY_CPU,
+                                label: `${BUSY_CPU}%`,
+                                note: $t('busy line'),
+                            }"
+                            :label="
+                                $t('Average CPU over the :span', {
+                                    span: cpuRange.span,
+                                })
+                            "
+                        />
+                    </div>
+                </div>
+            </section>
+
+            <div
+                v-if="hasMachines"
+                class="grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_20rem]"
+            >
+                <section class="ds-tray" aria-labelledby="list-heading">
+                    <div class="ds-tray-head">
                         <h2
                             id="list-heading"
-                            class="text-[15px]/6 font-semibold tracking-[-0.01em]"
+                            class="font-medium text-(--ds-text)"
                         >
-                            {{ machineList.title }}
+                            {{ $t('Machines') }}
                         </h2>
-                        <p
-                            class="truncate text-[13px]/5 text-(--ds-text-muted) tabular-nums"
+                        <span class="font-ui-mono text-(--ds-text-faint)">{{
+                            stats.machines
+                        }}</span>
+                        <span
+                            class="hidden truncate text-(--ds-text-faint) md:inline"
+                            >· {{ fleetFacts.join(' · ') }}</span
                         >
-                            <template
-                                v-for="(fact, index) in fleetFacts"
-                                :key="fact"
-                            >
-                                <span v-if="index > 0" aria-hidden="true">
-                                    ·
-                                </span>
-                                {{ fact }}
-                            </template>
-                        </p>
-                    </div>
-                    <Link
-                        :href="machinesHref.url"
-                        class="group flex shrink-0 items-center gap-1 rounded-md text-[13px]/5 font-medium text-(--ds-text-muted) hover:text-(--ds-text)"
-                        :class="focusRing"
-                    >
-                        {{ $t('All machines') }}
-                        <ArrowRight
-                            class="mi-arrow size-3.5"
-                            :stroke-width="1.75"
-                        />
-                    </Link>
-                </div>
-
-                <ul class="ds-tile ds-tile-rows flex flex-col">
-                    <li
-                        v-for="row in machineList.rows"
-                        :key="row.machine.id ?? row.machine.name"
-                        class="ds-tile-row"
-                    >
-                        <component
-                            :is="row.machine.id ? Link : 'div'"
-                            :href="
-                                row.machine.id
-                                    ? `/machines/${row.machine.id}`
-                                    : undefined
-                            "
-                            class="flex h-11 items-center gap-3 px-4 text-[14px]/5 transition-colors"
-                            :class="
-                                row.machine.id && [
-                                    'hover:bg-(--ds-row-hover)',
-                                    focusRing,
-                                ]
-                            "
+                        <Link
+                            :href="machinesHref.url"
+                            class="group ml-auto flex shrink-0 items-center gap-1 rounded-md hover:text-(--ds-text)"
+                            :class="focusRing"
                         >
-                            <IconTip
-                                v-if="providerBrand(row.machine.provider)"
-                                :label="row.machine.provider ?? ''"
-                            >
-                                <span class="flex size-4 shrink-0 items-center">
-                                    <ProviderName
-                                        :name="row.machine.provider"
-                                        logo-only
-                                    />
-                                </span>
-                            </IconTip>
-                            <Server
-                                v-else
-                                class="size-4 shrink-0 text-(--ds-text-faint)"
+                            {{ $t('All machines') }}
+                            <ArrowRight
+                                class="mi-arrow size-3.5"
                                 :stroke-width="1.75"
-                                aria-hidden="true"
                             />
-                            <span class="min-w-0 truncate font-medium">
-                                {{ row.machine.name }}
-                            </span>
-                            <span
-                                class="hidden min-w-0 items-center gap-1.5 truncate text-[13px] text-(--ds-text-faint) md:flex"
-                            >
-                                <ProviderName
-                                    v-if="!providerBrand(row.machine.provider)"
-                                    :name="row.machine.provider"
-                                />
-                                <template v-if="row.machine.ip">
-                                    <span
-                                        v-if="
-                                            !providerBrand(row.machine.provider)
-                                        "
-                                        aria-hidden="true"
-                                        >·</span
-                                    >
-                                    <span class="tabular-nums">{{
-                                        row.machine.ip
-                                    }}</span>
-                                </template>
-                            </span>
-                            <span
-                                class="ml-auto hidden shrink-0 items-center gap-4 text-[13px] text-(--ds-text-muted) tabular-nums sm:flex"
-                            >
-                                <span :title="$t('CPU')">
-                                    {{ row.machine.cpu }}% {{ $t('CPU') }}
-                                </span>
-                                <span>
-                                    {{ row.machine.services }}
-                                    {{
-                                        row.machine.services === 1
-                                            ? $t('service')
-                                            : $t('services')
-                                    }}
-                                </span>
-                                <span class="hidden lg:inline">{{
-                                    row.machine.memory
-                                }}</span>
-                                <span
-                                    class="hidden w-32 text-right lg:inline"
-                                    :class="row.tone"
-                                    >{{ row.text }}</span
+                        </Link>
+                    </div>
+                    <div class="ds-tile overflow-x-auto">
+                        <table
+                            class="w-full min-w-[720px] border-collapse text-left text-[13px]/5"
+                        >
+                            <thead>
+                                <tr
+                                    class="text-[12px]/4 text-(--ds-text-faint)"
                                 >
-                            </span>
-                            <InstallingBadge
-                                v-if="row.machine.installing"
-                                class="max-sm:ml-auto"
-                                :cycle="false"
-                                themed
-                            />
-                            <EnvironmentBadge
-                                v-else
-                                class="max-sm:ml-auto"
-                                :environment="row.machine.environment"
-                                themed
-                            />
-                        </component>
-                    </li>
-                </ul>
-            </section>
+                                    <th class="py-2.5 pr-3 pl-4 font-normal">
+                                        {{ $t('Machine') }}
+                                    </th>
+                                    <th
+                                        class="border-l border-(--ds-divider) px-3 font-normal"
+                                    >
+                                        {{ $t('Provider') }}
+                                    </th>
+                                    <th
+                                        class="w-40 border-l border-(--ds-divider) px-3 font-normal"
+                                    >
+                                        {{ $t('CPU') }}
+                                    </th>
+                                    <th
+                                        class="w-40 border-l border-(--ds-divider) px-3 font-normal"
+                                    >
+                                        {{ $t('Disk') }}
+                                    </th>
+                                    <th
+                                        class="w-24 border-l border-(--ds-divider) px-3 text-right font-normal"
+                                    >
+                                        {{ $t('Memory') }}
+                                    </th>
+                                    <th
+                                        class="w-20 border-l border-(--ds-divider) px-3 text-right font-normal"
+                                    >
+                                        {{ $t('Services') }}
+                                    </th>
+                                    <th
+                                        class="w-28 border-l border-(--ds-divider) pr-4 pl-3 text-right font-normal"
+                                    >
+                                        {{ $t('Backup') }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody
+                                v-for="group in machineGroups"
+                                :key="group.key"
+                            >
+                                <tr
+                                    class="border-t border-(--ds-divider) bg-(--ds-subtle)"
+                                >
+                                    <th
+                                        colspan="7"
+                                        class="py-2 pr-3 pl-4 text-left font-medium"
+                                    >
+                                        {{ group.label }}
+                                        <span
+                                            class="ml-1 font-ui-mono font-normal text-(--ds-text-faint)"
+                                            >{{ group.rows.length }}</span
+                                        >
+                                    </th>
+                                </tr>
+                                <tr
+                                    v-for="machine in group.rows"
+                                    :key="machine.id ?? machine.name"
+                                    class="group/row relative border-t border-(--ds-divider) transition-colors hover:bg-(--ds-row-hover)"
+                                >
+                                    <td class="py-2.5 pr-3 pl-4">
+                                        <component
+                                            :is="machine.id ? Link : 'div'"
+                                            :href="
+                                                machine.id
+                                                    ? `/machines/${machine.id}`
+                                                    : undefined
+                                            "
+                                            class="flex min-w-0 items-center gap-2.5 after:absolute after:inset-0"
+                                            :class="machine.id && focusRing"
+                                        >
+                                            <span
+                                                class="size-1.5 shrink-0 rounded-full"
+                                                :class="
+                                                    connectionTone[
+                                                        machine.connection ??
+                                                            'demo'
+                                                    ]
+                                                "
+                                                :title="machine.connection"
+                                            />
+                                            <span
+                                                class="truncate font-medium"
+                                                >{{ machine.name }}</span
+                                            >
+                                            <span
+                                                class="truncate font-ui-mono text-[11.5px] text-(--ds-text-faint)"
+                                                >{{ machine.ip }}</span
+                                            >
+                                        </component>
+                                    </td>
+                                    <td
+                                        class="border-l border-(--ds-divider) px-3"
+                                    >
+                                        <ProviderName
+                                            :name="machine.provider"
+                                            class="text-(--ds-text-secondary)"
+                                        />
+                                    </td>
+                                    <td
+                                        class="border-l border-(--ds-divider) px-3"
+                                    >
+                                        <span
+                                            class="flex items-center gap-2.5 font-ui-mono text-[12px] tabular-nums"
+                                        >
+                                            <DotMeter
+                                                :value="machine.cpu"
+                                                :warn-at="BUSY_CPU"
+                                                :dots="12"
+                                            />
+                                            <span
+                                                class="w-9 text-right"
+                                                :class="
+                                                    machine.cpu >= BUSY_CPU
+                                                        ? 'text-(--ds-amber)'
+                                                        : 'text-(--ds-text-secondary)'
+                                                "
+                                                >{{ machine.cpu }}%</span
+                                            >
+                                        </span>
+                                    </td>
+                                    <td
+                                        class="border-l border-(--ds-divider) px-3"
+                                    >
+                                        <span
+                                            v-if="
+                                                machine.diskPercent !== null &&
+                                                machine.diskPercent !==
+                                                    undefined
+                                            "
+                                            class="flex items-center gap-2.5 font-ui-mono text-[12px] tabular-nums"
+                                        >
+                                            <DotMeter
+                                                :value="machine.diskPercent"
+                                                :warn-at="BUSY_CPU"
+                                                :dots="12"
+                                            />
+                                            <span
+                                                class="w-9 text-right"
+                                                :class="
+                                                    machine.diskPercent >=
+                                                    BUSY_CPU
+                                                        ? 'text-(--ds-amber)'
+                                                        : 'text-(--ds-text-secondary)'
+                                                "
+                                                >{{
+                                                    machine.diskPercent
+                                                }}%</span
+                                            >
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="font-ui-mono text-(--ds-text-faint)"
+                                            >—</span
+                                        >
+                                    </td>
+                                    <td
+                                        class="border-l border-(--ds-divider) px-3 text-right font-ui-mono text-[12px] whitespace-nowrap text-(--ds-text-secondary) tabular-nums"
+                                    >
+                                        {{ machine.memory }}
+                                    </td>
+                                    <td
+                                        class="border-l border-(--ds-divider) px-3 text-right font-ui-mono text-[12px] whitespace-nowrap text-(--ds-text-secondary) tabular-nums"
+                                    >
+                                        {{ machine.services }}
+                                    </td>
+                                    <td
+                                        class="border-l border-(--ds-divider) pr-4 pl-3 text-right font-ui-mono text-[12px] whitespace-nowrap text-(--ds-text-muted)"
+                                    >
+                                        {{ machine.lastBackup }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <aside
+                    class="grid items-start gap-5 md:grid-cols-2 2xl:flex 2xl:flex-col"
+                    :aria-label="$t('Shortcuts')"
+                >
+                    <section class="ds-tray" aria-labelledby="mix-heading">
+                        <div class="ds-tray-head">
+                            <h2
+                                id="mix-heading"
+                                class="font-medium text-(--ds-text)"
+                            >
+                                {{ $t('Fleet') }}
+                            </h2>
+                            <span class="ml-auto font-ui-mono">{{
+                                machineAllowance
+                            }}</span>
+                        </div>
+                        <div class="ds-tile flex flex-col gap-4 p-4">
+                            <div class="flex h-2 gap-1" aria-hidden="true">
+                                <span
+                                    v-for="env in envMix.filter(
+                                        (env) => env.count > 0,
+                                    )"
+                                    :key="env.label"
+                                    class="h-full rounded-[2px]"
+                                    :class="env.color"
+                                    :style="{ flexGrow: env.count }"
+                                />
+                            </div>
+                            <ul
+                                class="flex flex-col gap-2 font-ui-mono text-[12px]/4"
+                            >
+                                <li
+                                    v-for="env in envMix"
+                                    :key="env.label"
+                                    class="flex items-center gap-2"
+                                >
+                                    <span
+                                        class="size-2 rounded-[2px]"
+                                        :class="env.color"
+                                        aria-hidden="true"
+                                    />
+                                    <span class="text-(--ds-text-secondary)">{{
+                                        env.label.toLowerCase()
+                                    }}</span>
+                                    <span
+                                        class="ml-auto text-(--ds-text) tabular-nums"
+                                        >{{ env.count }}</span
+                                    >
+                                    <span
+                                        class="w-10 text-right text-(--ds-text-faint) tabular-nums"
+                                        >{{ env.share }}</span
+                                    >
+                                </li>
+                            </ul>
+                            <ul
+                                v-if="topProviders.length"
+                                class="flex flex-col gap-2 border-t border-(--ds-divider) pt-3 text-[12.5px]/4"
+                            >
+                                <li
+                                    v-for="provider in topProviders"
+                                    :key="provider.provider"
+                                    class="flex items-center gap-2"
+                                >
+                                    <ProviderName
+                                        :name="provider.provider"
+                                        class="text-(--ds-text-secondary)"
+                                    />
+                                    <span
+                                        class="ml-auto font-ui-mono text-[12px] text-(--ds-text) tabular-nums"
+                                        >{{ provider.machines }}</span
+                                    >
+                                    <span
+                                        class="w-10 text-right font-ui-mono text-[12px] text-(--ds-text-faint) tabular-nums"
+                                        >{{ share(provider.machines) }}</span
+                                    >
+                                </li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    <section class="ds-tray" aria-labelledby="quick-heading">
+                        <div class="ds-tray-head">
+                            <h2
+                                id="quick-heading"
+                                class="font-medium text-(--ds-text)"
+                            >
+                                {{ $t('Shortcuts') }}
+                            </h2>
+                        </div>
+                        <ul class="ds-tile flex flex-col py-1">
+                            <li
+                                v-for="action in quickActions"
+                                :key="action.label"
+                            >
+                                <Link
+                                    :href="action.href"
+                                    class="group flex h-9 items-center gap-2.5 px-3.5 text-[13px]/5 text-(--ds-text-secondary) transition-colors hover:bg-(--ds-row-hover) hover:text-(--ds-text)"
+                                    :class="focusRing"
+                                >
+                                    <component
+                                        :is="action.icon"
+                                        class="size-3.5 text-(--ds-text-faint)"
+                                        :stroke-width="1.75"
+                                    />
+                                    {{ action.label }}
+                                    <ArrowRight
+                                        class="mi-arrow ml-auto size-3.5 text-(--ds-text-faint)"
+                                        :stroke-width="1.75"
+                                    />
+                                </Link>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    class="flex h-9 w-full cursor-pointer items-center gap-2.5 px-3.5 text-[13px]/5 text-(--ds-text-secondary) transition-colors hover:bg-(--ds-row-hover) hover:text-(--ds-text)"
+                                    :class="focusRing"
+                                    aria-controls="assistant-panel"
+                                    :aria-expanded="assistant.open.value"
+                                    @click="assistant.toggle()"
+                                >
+                                    <AskAi
+                                        class="size-3.5 text-(--ds-text-faint)"
+                                        :stroke-width="1.75"
+                                    />
+                                    {{ $t('Ask AI') }}
+                                    <kbd
+                                        class="ml-auto font-ui-mono text-[11px] text-(--ds-text-faint)"
+                                        >⌘J</kbd
+                                    >
+                                </button>
+                            </li>
+                        </ul>
+                    </section>
+                </aside>
+            </div>
 
             <div v-else class="grid items-start gap-x-6 gap-y-8 lg:grid-cols-2">
                 <section
