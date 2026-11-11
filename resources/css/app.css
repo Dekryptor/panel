@@ -2821,4 +2821,91 @@ html.dark
     border-radius: 10px;
 }
 
+:root {
+    --ds-menu: #ffffff;
+    --ds-menu-icon: #8e8e88;
+    --ds-menu-rule: #ececea;
+    --ds-menu-hover: #f2f2f0;
+    --ds-menu-shadow:
+        rgb(0 0 0 / 0.06) 0 0 0 1px, rgb(0 0 0 / 0.08) 0 1px 2px,
+        rgb(0 0 0 / 0.14) 0 12px 32px -8px;
+}
+
+.dark {
+    --ds-menu: #0f0f0f;
+    --ds-menu-icon: #a8a8a8;
+    --ds-menu-rule: #303030;
+    --ds-menu-hover: #1f1f1f;
+    --ds-menu-shadow:
+        rgb(255 255 255 / 0.06) 0 1px 0 inset, rgb(0 0 0 / 0.5) 0 1px 2px,
+        rgb(0 0 0 / 0.6) 0 12px 32px -8px;
+}
+
+:is(
+    [data-slot='dropdown-menu-content'],
+    [data-slot='dropdown-menu-sub-content'],
+    [data-slot='select-content']
+),
+.dark
+    :is(
+        [data-slot='dropdown-menu-content'],
+        [data-slot='dropdown-menu-sub-content'],
+        [data-slot='select-content']
+    ) {
+    padding: 4px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--ds-menu);
+    box-shadow: var(--ds-menu-shadow);
+    color: var(--ds-text);
+    font-family: var(--font-ui);
+}
+
+:is(
+    [data-slot='dropdown-menu-item'],
+    [data-slot='dropdown-menu-sub-trigger'],
+    [data-slot='dropdown-menu-checkbox-item'],
+    [data-slot='dropdown-menu-radio-item'],
+    [data-slot='select-item']
+) {
+    min-height: 32px;
+    gap: 8px;
+    padding-block: 4px;
+    border-radius: 8px;
+    color: var(--ds-text);
+    font-size: 13px;
+    line-height: 18px;
+    letter-spacing: -0.003em;
+
+    & > svg:first-child,
+    & > :first-child > svg {
+        width: 16px;
+        height: 16px;
+        color: var(--ds-menu-icon);
+    }
+
+    &[data-highlighted],
+    &:focus-visible {
+        background-color: var(--ds-menu-hover);
+        color: var(--ds-text);
+    }
+}
+
+[data-slot='dropdown-menu-sub-trigger'] > svg:last-child {
+    width: 12px;
+    height: 12px;
+}
+
+:is([data-slot='dropdown-menu-separator'], [data-slot='select-separator']) {
+    height: 1px;
+    margin: 4px -4px;
+    background-color: var(--ds-menu-rule);
+}
+
+:is([data-slot='dropdown-menu-label'], [data-slot='select-label']) {
+    padding: 6px 8px 4px;
+    color: var(--ds-text-faint);
+    font-size: 12px;
+}
+
 @package-css 'panel-art.css';
