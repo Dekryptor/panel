@@ -39,7 +39,7 @@ const PITCH = 6;
 const LEVELS = 14;
 const AXIS = 26;
 const TOP = 34;
-const RIGHT = 96;
+const RIGHT = 0;
 
 let width = 0;
 let height = 0;
@@ -235,8 +235,13 @@ function draw(): void {
         ctx.lineTo(fx + fw, y);
         ctx.stroke();
         ctx.setLineDash([]);
-        text(threshold.label, fx + fw + 10, y + 3, c.ink);
-        text(threshold.note, fx + fw + 10, y + 16, c.dim);
+        text(
+            `${threshold.label} · ${threshold.note}`,
+            fx + fw,
+            y - 7,
+            c.dim,
+            'right',
+        );
     }
 
     const axisY = base + 6.5;
@@ -354,7 +359,7 @@ watch(
         <canvas ref="canvas" class="absolute inset-0 size-full" />
         <div
             v-if="empty"
-            class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 pr-24 text-center font-ui-mono text-[11px]/4 uppercase"
+            class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 text-center font-ui-mono text-[11px]/4 uppercase"
         >
             <span class="text-(--ds-text-secondary)">{{
                 $t('No CPU samples in the last hour')
