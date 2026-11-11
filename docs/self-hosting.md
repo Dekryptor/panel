@@ -156,7 +156,11 @@ The data is in Docker volumes: `serveros_database` (PostgreSQL), `serveros_stora
 
 ## Connecting machines
 
-Connect machines from Machines › Connect machine, as on serveros.com. The command it gives you downloads the daemon from releases.serveros.com and connects it to your panel at `panel.example.com:8443`. Each machine needs to reach that port, and your panel's domain on 443.
+The panel and the daemon go together. Each server you manage runs `serverosd`, the open source ServerOS daemon ([serveroshq/daemon](https://github.com/serveroshq/daemon), AGPL-3.0), and your install runs the gateway those daemons connect to: the `gateway` container on port 8443, built from the same repository.
+
+To connect a server, open Machines › Connect machine and run the command it gives you on that server. The command downloads the daemon from releases.serveros.com, checks it against the release's checksum and ServerOS's signature before installing it, and connects it to your panel at `panel.example.com:8443`. Each machine needs to reach that port, and your panel's domain on 443. Nothing has to be open on the machine itself: the daemon connects out.
+
+The key the signature is checked with is `DAEMON_RELEASE_PUBKEY`, which the install script sets for you. If you build and publish your own daemon releases, set `DAEMON_RELEASES_URL` and `DAEMON_RELEASE_PUBKEY` to your own. Every hour your panel fetches the newest daemon releases (see [What your install sends](#what-your-install-sends)) so it can offer your machines updates. The [daemon's repository](https://github.com/serveroshq/daemon) has its source, how to build it and how it updates itself.
 
 The panel signs each machine's certificate with its own key, made the first time it starts and kept in storage. **Keep backups of it**: without it, your machines can't reconnect, and have to be connected again.
 

@@ -131,6 +131,10 @@ APP_KEY=base64:$(head -c 32 /dev/urandom | base64)
 DB_PASSWORD=$(random 24)
 DAEMON_GATEWAY_SECRET=$(random 32)
 
+# The key ServerOS signs daemon releases with. Machines check the daemon
+# they download against it before installing it.
+DAEMON_RELEASE_PUBKEY=5245716675785d7bf5dc36d783fa5c690c705da4d542082f398e3e79543d06f8
+
 # Email, for invitations, alerts and password resets: set it up in the
 # web installer, or here. Until it's set up, emails are only written to
 # the log (docker compose logs queue).
@@ -158,6 +162,7 @@ elif [ "$VERSION" != "latest" ] || [ "$IMAGE_GIVEN" = 1 ] || ! grep -q '^SERVERO
     fi
 fi
 IMAGE="$(grep -E '^SERVEROS_IMAGE=' .env | tail -n1 | cut -d= -f2-)"
+grep -q '^DAEMON_RELEASE_PUBKEY=' .env || printf 'DAEMON_RELEASE_PUBKEY=%s\n' "5245716675785d7bf5dc36d783fa5c690c705da4d542082f398e3e79543d06f8" >> .env
 
 say "Pulling $IMAGE"
 if ! docker pull "$IMAGE"; then
@@ -185,6 +190,8 @@ until docker compose exec -T web curl -fsS http://127.0.0.1:8081/up >/dev/null 2
     [ "$tries" -lt 150 ] || fail "the panel didn't start in 5 minutes. See what happened: serveros-panel logs web"
     sleep 2
 done
+docker compose exec -T web php artisan daemon:sync-releases --no-interaction >/dev/null 2>&1 \
+    || warn "couldn't fetch the daemon releases from serveros.com yet. The panel tries again every hour; until then, machines can't connect."
 
 # Every night (serveros-panel nightly): a new certificate for the gateway
 # a month before its own runs out, then a backup of the database and

@@ -96,6 +96,7 @@ case "$role" in
         optimize
         log "ServerOS $(cat VERSION 2>/dev/null || echo dev) is starting on https://${SERVEROS_DOMAIN:-localhost}"
         publish_panel_ca
+        (php artisan daemon:sync-releases --no-interaction >/dev/null 2>&1 || true) &
         # Not set up yet: the setup code the installer asks for, in the log.
         php artisan install:code --banner --no-interaction >&2 || true
         exec frankenphp run --config /etc/caddy/Caddyfile

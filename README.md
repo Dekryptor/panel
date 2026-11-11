@@ -48,6 +48,8 @@ curl -fsSL https://raw.githubusercontent.com/serveroshq/panel/main/docker/self-h
 
 It installs Docker if it's missing, runs the official image (`ghcr.io/serveroshq/panel`) and prints a setup code. Open `https://panel.example.com`, enter it, and the installer walks you through email and your first account. `serveros-panel setup-code` shows the code again if you lose it.
 
+Then connect your servers from Machines › Connect machine. Each one runs [serverosd](https://github.com/serveroshq/daemon), the open source daemon, which connects out to your panel on port 8443.
+
 [docs/self-hosting.md](docs/self-hosting.md) covers the rest: building the community edition yourself, installing without Docker, upgrades, backups, connecting machines, and the anonymous daily ping (and how to turn it off).
 
 ## Editions

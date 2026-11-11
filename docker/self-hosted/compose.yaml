@@ -54,6 +54,7 @@ x-panel: &panel
         DAEMON_GATEWAY_HOST: ${SERVEROS_DOMAIN}:${GATEWAY_PORT:-8443}
         DAEMON_GATEWAY_INTERNAL_URL: http://gateway:8090
         DAEMON_GATEWAY_SECRET: ${DAEMON_GATEWAY_SECRET:?Set DAEMON_GATEWAY_SECRET in .env}
+        DAEMON_RELEASE_PUBKEY: ${DAEMON_RELEASE_PUBKEY:-5245716675785d7bf5dc36d783fa5c690c705da4d542082f398e3e79543d06f8}
         # The anonymous daily install ping (docs/self-hosting.md, "What your
         # install sends"): SERVEROS_TELEMETRY=false in .env turns it off.
         SERVEROS_TELEMETRY: ${SERVEROS_TELEMETRY:-true}
