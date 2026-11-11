@@ -57,6 +57,14 @@ export type WorkspaceNavItem = {
     href: NonNullable<InertiaLinkProps['href']> | null;
     active: boolean;
     group: WorkspaceNavGroup;
+    children?: WorkspaceNavChild[];
+};
+
+export type WorkspaceNavChild = {
+    key: string;
+    label: string;
+    href: string;
+    active: boolean;
 };
 
 export type WorkspaceNavGroup =
@@ -201,6 +209,30 @@ export function useWorkspaceNav(): ComputedRef<WorkspaceNavItem[]> {
                     page.component.startsWith('workspace/settings/') &&
                     page.component !== 'workspace/settings/Members',
                 group: 'workspace',
+                children: (
+                    [
+                        ['General', 'General', settings.general],
+                        ['Domains', 'Domains', settings.domains],
+                        ['Status page', 'StatusPage', settings.statusPage],
+                        [
+                            'Machine policies',
+                            'MachinePolicies',
+                            settings.machinePolicies,
+                        ],
+                        ['Log storage', 'LogStorage', settings.logStorage],
+                        ['API', 'Api', settings.api],
+                        ['AI and MCP', 'Mcp', settings.mcp],
+                        ['Profile', 'Profile', settings.profile],
+                        ['Appearance', 'Appearance', settings.appearance],
+                        ['Security', 'Security', settings.security],
+                    ] as const
+                ).map(([label, component, route]) => ({
+                    key: component,
+                    label: trans(label),
+                    href: onWorkspace(route(slug)).url,
+                    active:
+                        page.component === `workspace/settings/${component}`,
+                })),
             },
         ];
 

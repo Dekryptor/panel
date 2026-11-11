@@ -20,7 +20,6 @@ import NotchToaster from '@/components/workspace/NotchToaster.vue';
 import type AssistantPanelComponent from '@/components/workspace/AssistantPanel.vue';
 import WorkspacePageSkeleton from '@/components/workspace/WorkspacePageSkeleton.vue';
 import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar.vue';
-import WorkspaceFooter from '@/components/workspace/WorkspaceFooter.vue';
 import WorkspaceNavBar from '@/components/workspace/WorkspaceNavBar.vue';
 import { useAssistant } from '@/composables/useAssistant';
 import { useWorkspaceSwitch } from '@/composables/useWorkspaceSwitch';
@@ -145,12 +144,12 @@ watch(
             </a>
 
             <div
-                class="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-(--ds-frame)"
+                class="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-(--ds-frame) lg:bg-(--ds-panel) lg:p-2"
             >
                 <aside
                     v-if="layout === 'sidebar'"
-                    class="hidden shrink-0 border-r border-(--ds-border) bg-(--ds-sidebar) transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block"
-                    :class="collapsed ? 'w-16' : 'w-60'"
+                    class="hidden shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none lg:block"
+                    :class="collapsed ? 'w-14' : 'w-[228px]'"
                 >
                     <WorkspaceSidebar
                         :collapsed="collapsed"
@@ -160,7 +159,10 @@ watch(
                     />
                 </aside>
 
-                <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div
+                    class="flex min-h-0 min-w-0 flex-1 flex-col bg-(--ds-frame) lg:overflow-hidden lg:rounded-[14px] lg:shadow-[0_0_0_1px_var(--ds-border)] lg:dark:shadow-none"
+                    :class="{ 'lg:ml-[3px]': layout === 'sidebar' }"
+                >
                     <WorkspaceNavBar
                         :sidebar="layout === 'sidebar'"
                         @search="openSearch"
@@ -193,8 +195,6 @@ watch(
                             <slot v-else />
                         </div>
                     </main>
-
-                    <WorkspaceFooter />
                 </div>
             </div>
 

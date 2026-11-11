@@ -118,7 +118,7 @@ const groups = computed<Group[]>(() => {
         {
             key: 'start',
             label: null,
-            rows: rowsIn('start'),
+            rows: [...rowsIn('start'), askRow],
         },
         { key: 'servers', label: 'Servers', rows: rowsIn('servers') },
         { key: 'operations', label: 'Operations', rows: rowsIn('operations') },
@@ -229,7 +229,12 @@ const currentKey = computed(() => {
         return askRow.key;
     }
 
-    return allRows.value.find((row) => row.item?.active)?.key;
+    const row = allRows.value.find((row) => row.item?.active);
+    const child = collapsed
+        ? undefined
+        : row?.item?.children?.find((child) => child.active);
+
+    return child ? `${row?.key}/${child.key}` : row?.key;
 });
 
 function pillStyle(key: string | null | undefined): Record<string, string> {
@@ -299,30 +304,30 @@ const focusRing =
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring)';
 
 const rowClass =
-    'sidebar-item flex h-8 w-full items-center gap-2.5 rounded-[8px] text-[14px]/5 transition-colors duration-200';
+    'sidebar-item flex h-8 w-full items-center gap-2 rounded-[10px] text-[14px]/5 tracking-[-0.006em] transition-colors duration-200';
 </script>
 
 <template>
-    <div class="flex h-full flex-col pb-2 font-ui text-(--ds-text)">
+    <div class="flex h-full flex-col font-ui text-(--ds-text)">
         <div
             v-if="!collapsed"
-            class="flex h-14 shrink-0 items-center gap-1 pr-2.5 pl-2"
+            class="flex h-8 shrink-0 items-center gap-0.5 pr-0.5 pl-3"
         >
-            <WorkspaceMenu class="flex min-w-0 flex-1" />
-            <button
-                v-if="collapsible"
-                type="button"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
+            <a
+                :href="page.props.appUrl"
+                class="mr-auto flex items-center rounded-md"
                 :class="focusRing"
-                :aria-label="$t('Collapse sidebar')"
-                aria-expanded="true"
-                @click="emit('toggle')"
+                aria-label="ServerOS"
             >
-                <PanelLeft class="mi-panel size-4" :stroke-width="1.6" />
-            </button>
+                <img
+                    src="/images/landing/serveros-logo.svg"
+                    alt=""
+                    class="size-[18px] object-contain invert dark:invert-0"
+                />
+            </a>
             <button
                 type="button"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                class="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
                 :class="focusRing"
                 :aria-label="$t('Search')"
                 :title="$t('Search (⌘K)')"
@@ -332,23 +337,19 @@ const rowClass =
                 <Search class="size-4" :stroke-width="1.75" />
             </button>
             <button
+                v-if="collapsible"
                 type="button"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] bg-(--ds-card) text-(--ds-text) shadow-[0_0_0_1px_var(--ds-border-strong),0_1px_2px_rgb(0_0_0/0.08)] transition-colors duration-150 hover:bg-(--ds-hover)"
+                class="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] text-(--ds-text-muted) transition-colors duration-150 hover:bg-(--ds-hover) hover:text-(--ds-text)"
                 :class="focusRing"
-                :aria-label="$t('Ask AI')"
-                :title="$t('Ask AI (⌘J)')"
-                aria-controls="assistant-panel"
-                :aria-expanded="assistant.open.value"
-                @click="openAssistant"
+                :aria-label="$t('Collapse sidebar')"
+                aria-expanded="true"
+                @click="emit('toggle')"
             >
-                <SolarAskAi class="size-4" :stroke-width="1.75" />
+                <PanelLeft class="mi-panel size-4" :stroke-width="1.6" />
             </button>
         </div>
 
-        <div
-            v-else
-            class="flex h-14 shrink-0 items-center justify-center border-b border-(--ds-border)"
-        >
+        <div v-else class="flex h-8 shrink-0 items-center justify-center">
             <button
                 type="button"
                 class="group flex size-8 cursor-pointer items-center justify-center rounded-[8px] hover:bg-(--ds-hover)"
@@ -414,10 +415,15 @@ const rowClass =
                 />
 
                 <template v-for="(group, index) in groups" :key="group.key">
-                    <h2 v-if="group.label && !collapsed" class="mt-5 mb-0.5">
+                    <div
+                        v-if="index === 1 && !collapsed"
+                        class="mx-1 mt-3 h-px bg-(--ds-divider)"
+                        aria-hidden="true"
+                    />
+                    <h2 v-if="group.label && !collapsed" class="mt-4 mb-px">
                         <button
                             type="button"
-                            class="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
+                            class="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
                             :class="focusRing"
                             :aria-expanded="isOpen(group.key)"
                             @click="toggleGroup(group.key)"
@@ -443,88 +449,150 @@ const rowClass =
                         class="flex flex-col gap-0.5"
                         :class="{ 'mt-2': !group.label && !collapsed }"
                     >
-                        <li
-                            v-for="row in group.rows"
-                            :key="row.key"
-                            :ref="(el) => setItemEl(row.key, el)"
-                        >
-                            <button
-                                v-if="row.key === 'ask'"
-                                type="button"
-                                class="cursor-pointer"
-                                :class="[
-                                    rowClass,
-                                    collapsed
-                                        ? 'justify-center px-0'
-                                        : 'px-2.5',
-                                    currentKey === row.key
-                                        ? 'text-(--ds-text)'
-                                        : 'text-(--ds-text-secondary) hover:text-(--ds-text)',
-                                    focusRing,
-                                ]"
-                                :aria-expanded="assistant.open.value"
-                                aria-controls="assistant-panel"
-                                :aria-label="
-                                    collapsed ? $t('Ask AI') : undefined
-                                "
-                                :title="
-                                    collapsed ? $t('Ask AI (⌘J)') : undefined
-                                "
-                                @mouseenter="enter(row.key)"
-                                @click="openAssistant"
-                            >
-                                <component
-                                    :is="row.icon"
-                                    class="size-4 shrink-0 text-(--ds-text-muted)"
-                                    :stroke-width="1.6"
-                                />
-                                <template v-if="!collapsed">
-                                    <span class="truncate">{{
-                                        $t(row.label)
-                                    }}</span>
-                                    <kbd
-                                        class="ml-auto font-ui text-[11px]/3.5 text-(--ds-text-faint)"
-                                        >⌘J</kbd
-                                    >
-                                </template>
-                            </button>
-                            <Link
-                                v-else-if="row.item?.href"
-                                :href="row.item.href"
-                                :class="[
-                                    rowClass,
-                                    collapsed
-                                        ? 'justify-center px-0'
-                                        : 'px-2.5',
-                                    currentKey === row.key
-                                        ? 'text-(--ds-text)'
-                                        : 'text-(--ds-text-secondary) hover:text-(--ds-text)',
-                                    focusRing,
-                                ]"
-                                :aria-current="
-                                    row.item.active ? 'page' : undefined
-                                "
-                                :aria-label="
-                                    collapsed ? $t(row.label) : undefined
-                                "
-                                :title="collapsed ? $t(row.label) : undefined"
-                                @mouseenter="enter(row.key)"
-                                @click="pending = row.key"
-                            >
-                                <component
-                                    :is="row.icon"
-                                    class="size-4 shrink-0 transition-colors duration-200"
-                                    :class="
+                        <li v-for="row in group.rows" :key="row.key">
+                            <div :ref="(el) => setItemEl(row.key, el)">
+                                <button
+                                    v-if="row.key === 'ask'"
+                                    type="button"
+                                    class="cursor-pointer"
+                                    :class="[
+                                        rowClass,
+                                        collapsed
+                                            ? 'justify-center px-0'
+                                            : 'px-2.5',
                                         currentKey === row.key
                                             ? 'text-(--ds-text)'
-                                            : 'text-(--ds-text-muted)'
+                                            : 'text-(--ds-text-secondary) hover:text-(--ds-text)',
+                                        focusRing,
+                                    ]"
+                                    :aria-expanded="assistant.open.value"
+                                    aria-controls="assistant-panel"
+                                    :aria-label="
+                                        collapsed ? $t('Ask AI') : undefined
                                     "
-                                    :stroke-width="1.6"
-                                />
-                                <span v-if="!collapsed" class="truncate">
-                                    {{ $t(row.label) }}
-                                </span>
-                            </Link>
+                                    :title="
+                                        collapsed
+                                            ? $t('Ask AI (⌘J)')
+                                            : undefined
+                                    "
+                                    @mouseenter="enter(row.key)"
+                                    @click="openAssistant"
+                                >
+                                    <component
+                                        :is="row.icon"
+                                        class="size-[15px] shrink-0 text-(--ds-text-muted)"
+                                        :stroke-width="1.6"
+                                    />
+                                    <template v-if="!collapsed">
+                                        <span class="truncate">{{
+                                            $t(row.label)
+                                        }}</span>
+                                        <kbd
+                                            class="ml-auto font-ui text-[11px]/3.5 text-(--ds-text-faint)"
+                                            >⌘J</kbd
+                                        >
+                                    </template>
+                                </button>
+                                <Link
+                                    v-else-if="row.item?.href"
+                                    :href="row.item.href"
+                                    :class="[
+                                        rowClass,
+                                        collapsed
+                                            ? 'justify-center px-0'
+                                            : 'px-2.5',
+                                        currentKey === row.key
+                                            ? 'text-(--ds-text)'
+                                            : 'text-(--ds-text-secondary) hover:text-(--ds-text)',
+                                        focusRing,
+                                    ]"
+                                    :aria-current="
+                                        row.item.active ? 'page' : undefined
+                                    "
+                                    :aria-label="
+                                        collapsed ? $t(row.label) : undefined
+                                    "
+                                    :title="
+                                        collapsed ? $t(row.label) : undefined
+                                    "
+                                    @mouseenter="enter(row.key)"
+                                    @click="pending = row.key"
+                                >
+                                    <component
+                                        :is="row.icon"
+                                        class="size-[15px] shrink-0 transition-colors duration-200"
+                                        :class="
+                                            currentKey === row.key
+                                                ? 'text-(--ds-text)'
+                                                : 'text-(--ds-text-muted)'
+                                        "
+                                        :stroke-width="1.6"
+                                    />
+                                    <span v-if="!collapsed" class="truncate">
+                                        {{ $t(row.label) }}
+                                    </span>
+                                    <svg
+                                        v-if="row.item.children && !collapsed"
+                                        viewBox="0 0 8 8"
+                                        class="size-2 shrink-0 text-(--ds-text-faint) transition-transform duration-150"
+                                        :class="{
+                                            '-rotate-90': !row.item.active,
+                                        }"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            d="M1 2.5h6L4 6z"
+                                            fill="currentColor"
+                                        />
+                                    </svg>
+                                </Link>
+                            </div>
+                            <ul
+                                v-if="
+                                    row.item?.children &&
+                                    row.item.active &&
+                                    !collapsed
+                                "
+                                class="mt-px flex flex-col gap-px"
+                            >
+                                <li
+                                    v-for="child in row.item.children"
+                                    :key="child.key"
+                                    :ref="
+                                        (el) =>
+                                            setItemEl(
+                                                `${row.key}/${child.key}`,
+                                                el,
+                                            )
+                                    "
+                                >
+                                    <Link
+                                        :href="child.href"
+                                        class="pr-2.5 pl-[33px]"
+                                        :class="[
+                                            rowClass,
+                                            currentKey ===
+                                            `${row.key}/${child.key}`
+                                                ? 'text-(--ds-text)'
+                                                : 'text-(--ds-text-muted) hover:text-(--ds-text)',
+                                            focusRing,
+                                        ]"
+                                        :aria-current="
+                                            child.active ? 'page' : undefined
+                                        "
+                                        @mouseenter="
+                                            enter(`${row.key}/${child.key}`)
+                                        "
+                                        @click="
+                                            pending = `${row.key}/${child.key}`
+                                        "
+                                    >
+                                        <span class="truncate">{{
+                                            child.label
+                                        }}</span>
+                                    </Link>
+                                </li>
+                            </ul>
                         </li>
                     </ul>
                 </template>
@@ -612,99 +680,103 @@ const rowClass =
                     </li>
                 </ul>
             </section>
-        </nav>
-
-        <section
-            v-if="!collapsed"
-            class="mx-2 mb-2 shrink-0"
-            aria-labelledby="sidebar-support"
-        >
-            <h2 id="sidebar-support" class="mb-0.5">
-                <button
-                    type="button"
-                    class="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
-                    :class="focusRing"
-                    :aria-expanded="isOpen('help')"
-                    @click="toggleGroup('help')"
-                >
-                    {{ $t('Help') }}
-                    <svg
-                        viewBox="0 0 8 8"
-                        class="size-2 transition-transform duration-150"
-                        :class="{ '-rotate-90': !isOpen('help') }"
-                        aria-hidden="true"
-                    >
-                        <path d="M1 2.5h6L4 6z" fill="currentColor" />
-                    </svg>
-                </button>
-            </h2>
-            <ul v-if="isOpen('help')" class="flex flex-col gap-0.5">
-                <li v-for="link in supportLinks" :key="link.key">
-                    <a
-                        v-if="link.external"
-                        :href="link.href"
-                        target="_blank"
-                        rel="noopener"
-                        class="group/link px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
-                        :class="[rowClass, focusRing]"
-                    >
-                        <component
-                            :is="link.icon"
-                            class="size-4 shrink-0 text-(--ds-text-muted)"
-                            :stroke-width="1.6"
-                        />
-                        {{ link.label }}
-                        <ArrowUpRight
-                            class="ml-auto size-3.5 text-(--ds-text-faint) opacity-0 group-hover/link:opacity-100"
-                            :stroke-width="1.75"
-                        />
-                    </a>
-                    <Link
-                        v-else
-                        :href="link.href"
-                        class="px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
-                        :class="[rowClass, focusRing]"
-                    >
-                        <component
-                            :is="link.icon"
-                            class="size-4 shrink-0 text-(--ds-text-muted)"
-                            :stroke-width="1.6"
-                        />
-                        {{ link.label }}
-                    </Link>
-                </li>
-                <li>
+            <section
+                v-if="!collapsed"
+                class="mt-4 mb-2 px-2"
+                aria-labelledby="sidebar-support"
+            >
+                <h2 id="sidebar-support" class="mb-0.5">
                     <button
                         type="button"
-                        class="cursor-pointer px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
-                        :class="[rowClass, focusRing]"
-                        @click="whatsNew.show()"
+                        class="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
+                        :class="focusRing"
+                        :aria-expanded="isOpen('help')"
+                        @click="toggleGroup('help')"
                     >
-                        <SolarWhatsNew
-                            class="size-4 shrink-0 text-(--ds-text-muted)"
-                            :stroke-width="1.6"
-                        />
-                        {{ $t('What’s new') }}
-                        <span
-                            v-if="whatsNew.unread.value"
-                            class="ml-auto rounded-full bg-(--ds-blue) px-1.5 font-ui-mono text-[10px]/4 text-white"
-                            >{{
-                                whatsNew.unread.value > 9
-                                    ? '9+'
-                                    : whatsNew.unread.value
-                            }}</span
+                        {{ $t('Help') }}
+                        <svg
+                            viewBox="0 0 8 8"
+                            class="size-2 transition-transform duration-150"
+                            :class="{ '-rotate-90': !isOpen('help') }"
+                            aria-hidden="true"
                         >
+                            <path d="M1 2.5h6L4 6z" fill="currentColor" />
+                        </svg>
                     </button>
-                </li>
-            </ul>
-        </section>
+                </h2>
+                <ul v-if="isOpen('help')" class="flex flex-col gap-0.5">
+                    <li v-for="link in supportLinks" :key="link.key">
+                        <a
+                            v-if="link.external"
+                            :href="link.href"
+                            target="_blank"
+                            rel="noopener"
+                            class="group/link px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                            :class="[rowClass, focusRing]"
+                        >
+                            <component
+                                :is="link.icon"
+                                class="size-[15px] shrink-0 text-(--ds-text-muted)"
+                                :stroke-width="1.6"
+                            />
+                            {{ link.label }}
+                            <ArrowUpRight
+                                class="ml-auto size-3.5 text-(--ds-text-faint) opacity-0 group-hover/link:opacity-100"
+                                :stroke-width="1.75"
+                            />
+                        </a>
+                        <Link
+                            v-else
+                            :href="link.href"
+                            class="px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                            :class="[rowClass, focusRing]"
+                        >
+                            <component
+                                :is="link.icon"
+                                class="size-[15px] shrink-0 text-(--ds-text-muted)"
+                                :stroke-width="1.6"
+                            />
+                            {{ link.label }}
+                        </Link>
+                    </li>
+                    <li>
+                        <button
+                            type="button"
+                            class="cursor-pointer px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
+                            :class="[rowClass, focusRing]"
+                            @click="whatsNew.show()"
+                        >
+                            <SolarWhatsNew
+                                class="size-[15px] shrink-0 text-(--ds-text-muted)"
+                                :stroke-width="1.6"
+                            />
+                            {{ $t('What’s new') }}
+                            <span
+                                v-if="whatsNew.unread.value"
+                                class="ml-auto rounded-full bg-(--ds-blue) px-1.5 font-ui-mono text-[10px]/4 text-white"
+                                >{{
+                                    whatsNew.unread.value > 9
+                                        ? '9+'
+                                        : whatsNew.unread.value
+                                }}</span
+                            >
+                        </button>
+                    </li>
+                </ul>
+            </section>
+        </nav>
 
         <div
-            class="shrink-0 px-2"
-            :class="{ 'flex justify-center': collapsed }"
+            class="flex shrink-0 items-center gap-1"
+            :class="collapsed ? 'flex-col justify-center' : 'pt-1'"
         >
+            <WorkspaceMenu
+                v-if="!collapsed"
+                variant="block"
+                class="flex min-w-0 flex-1"
+            />
             <AccountMenu
-                :display="collapsed ? 'avatar' : 'full'"
+                display="avatar"
                 :side="collapsed ? 'right' : 'top'"
                 :align="collapsed ? 'end' : 'start'"
             />

@@ -34,8 +34,7 @@ import AskAiButton from '@/components/workspace/AskAiButton.vue';
 import type { HealthIssue } from '@/lib/healthIssues';
 import ConnectMachineButton from '@/components/workspace/ConnectMachineButton.vue';
 import McpDialog from '@/components/workspace/McpDialog.vue';
-import DotColumns from '@/components/charts/DotColumns.vue';
-import DotGrid from '@/components/charts/DotGrid.vue';
+import RidgeChart from '@/components/charts/RidgeChart.vue';
 import SegmentedTabs from '@/components/workspace/SegmentedTabs.vue';
 import WorkspacePage from '@/components/workspace/WorkspacePage.vue';
 import { useAssistant } from '@/composables/useAssistant';
@@ -162,157 +161,86 @@ const machineAllowance = computed(() => {
 
 const BUSY_CPU = 80;
 
-const kpiColors = {
-    machines: '#3b7bff',
-    cpu: '#a78bfa',
-    services: '#f5a524',
-    backups: '#3ecf8e',
-};
-
 type Kpi = {
     label: string;
-    color: string;
     value: string;
     note: string;
     noteTone: string;
     href?: string;
-    caption: [string, string];
-    chart:
-        | { kind: 'columns'; values: (number | null)[]; max: number }
-        | {
-              kind: 'grid';
-              groups: { count: number; color: string }[];
-              total: number;
-              columns: number;
-              rows: number;
-          };
 };
 
-function cpuScale(peak: number | null): number {
-    return Math.min(
-        100,
-        Math.max(20, Math.ceil(((peak ?? 0) * 1.25) / 10) * 10),
-    );
-}
-
 const kpis = computed<Kpi[]>(() => {
-    const { machines, services, averageCpu, busy, backedUp, cpuTimeline } =
-        props.stats;
+    const { machines, services, averageCpu, busy, backedUp } = props.stats;
     const attention = props.issues.filter(
         (issue) => issue.severity !== 'notice',
     ).length;
-    const limit =
-        props.licenseMachines?.allowed ?? props.workspace.billing.machineLimit;
-    const known = cpuTimeline.filter((v): v is number => v !== null);
-    const peak = known.length > 0 ? Math.max(...known) : null;
+    const unprotected = machines - backedUp;
 
     return [
         {
             label: trans('Machines'),
-            color: kpiColors.machines,
             value: String(machines),
             note:
                 attention > 0
                     ? trans(':count need attention', {
                           count: String(attention),
                       })
-                    : trans('all healthy'),
-            noteTone: attention > 0 ? 'text-(--ds-amber)' : 'text-(--ds-green)',
+                    : trans('healthy'),
+            noteTone:
+                attention > 0 ? 'text-(--ds-amber)' : 'text-(--ds-text-faint)',
             href: machinesHref.value.url,
-            caption: [machineAllowance.value, ''],
-            chart: {
-                kind: 'grid',
-                groups: [
-                    {
-                        count: Math.max(0, machines - attention),
-                        color: kpiColors.machines,
-                    },
-                    { count: attention, color: 'var(--ds-amber)' },
-                ],
-                total: Math.max(machines, Math.min(limit ?? 0, 60), 30),
-                columns: 15,
-                rows: 4,
-            },
         },
         {
-            label: trans('CPU'),
-            color: kpiColors.cpu,
+            label: trans('Services'),
+            value: String(services),
+            note: trans('running'),
+            noteTone: 'text-(--ds-text-faint)',
+            href: onWorkspace(servicesRoutes.index(props.workspace.slug)).url,
+        },
+        {
+            label: trans('Average CPU'),
             value: `${averageCpu}%`,
             note:
                 busy > 0
                     ? trans(':count busy', { count: String(busy) })
-                    : peak !== null
-                      ? trans('peak :value%', { value: String(peak) })
-                      : '',
+                    : trans('normal'),
             noteTone: busy > 0 ? 'text-(--ds-amber)' : 'text-(--ds-text-faint)',
-            caption: [
-                trans('last hour, scale :max%', {
-                    max: String(cpuScale(peak)),
-                }),
-                trans('now'),
-            ],
-            chart: {
-                kind: 'columns',
-                values: cpuTimeline,
-                max: cpuScale(peak),
-            },
-        },
-        {
-            label: trans('Services'),
-            color: kpiColors.services,
-            value: String(services),
-            note: trans(
-                machines === 1 ? 'on :count machine' : 'on :count machines',
-                { count: String(machines) },
-            ),
-            noteTone: 'text-(--ds-text-faint)',
-            href: onWorkspace(servicesRoutes.index(props.workspace.slug)).url,
-            caption: [trans('1 dot = 1 service'), ''],
-            chart: {
-                kind: 'grid',
-                groups: [{ count: services, color: kpiColors.services }],
-                total: Math.max(services, 60),
-                columns: 15,
-                rows: 4,
-            },
         },
         {
             label: trans('Backups'),
-            color: kpiColors.backups,
             value: `${backedUp}/${machines}`,
             note:
-                machines - backedUp > 0
+                unprotected > 0
                     ? trans(':count unprotected', {
-                          count: String(machines - backedUp),
+                          count: String(unprotected),
                       })
-                    : trans('all covered'),
+                    : (props.lastBackup ?? ''),
             noteTone:
-                machines - backedUp > 0
-                    ? 'text-(--ds-red)'
-                    : 'text-(--ds-green)',
+                unprotected > 0 ? 'text-(--ds-red)' : 'text-(--ds-text-faint)',
             href: onWorkspace(backupsRoutes.index(props.workspace.slug)).url,
-            caption: [
-                props.lastBackup
-                    ? trans('last :when', { when: props.lastBackup })
-                    : trans('no backups yet'),
-                '',
-            ],
-            chart: {
-                kind: 'grid',
-                groups: [
-                    { count: backedUp, color: kpiColors.backups },
-                    {
-                        count: machines - backedUp,
-                        color: 'var(--ds-red)',
-                    },
-                ],
-                total: Math.max(machines, 30),
-                columns: 15,
-                rows: 4,
-            },
         },
     ];
 });
+
+const cpuLabels = computed(() => {
+    const now = Date.now();
+    const count = props.stats.cpuTimeline.length;
+
+    return props.stats.cpuTimeline.map((_, index) =>
+        new Date(now - (count - 1 - index) * 60_000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+        }),
+    );
+});
+
+const cpuTicks = [
+    { at: 0, label: '-60m' },
+    { at: 0.25, label: '-45m' },
+    { at: 0.5, label: '-30m' },
+    { at: 0.75, label: '-15m' },
+    { at: 1, label: trans('now') },
+];
 
 const connectionTone: Record<NonNullable<Machine['connection']>, string> = {
     online: 'bg-(--ds-green)',
@@ -342,7 +270,11 @@ const quickActions = computed(() => [
     },
 ]);
 
-const envColors = ['bg-[#3b7bff]', 'bg-[#a78bfa]', 'bg-(--ds-text-faint)'];
+const envColors = [
+    'bg-[#3b7bff]',
+    'bg-(--ds-text-secondary)',
+    'bg-(--ds-text-faint)',
+];
 
 const environments = computed(() => {
     const { production, staging, development } = props.stats.environments;
@@ -746,21 +678,20 @@ const focusRing =
 
             <section
                 v-if="hasMachines"
-                class="ds-tile grid overflow-hidden sm:grid-cols-2 xl:grid-cols-4"
+                class="ds-tile overflow-hidden"
                 :aria-label="$t('Status')"
             >
-                <div
-                    v-for="kpi in kpis"
-                    :key="kpi.label"
-                    class="relative flex min-w-0 flex-col gap-3 border-(--ds-divider) p-4 not-first:max-sm:border-t sm:even:border-l xl:not-first:border-l sm:[&:nth-child(n+3)]:max-xl:border-t"
+                <dl
+                    class="grid border-b border-(--ds-divider) sm:grid-cols-2 xl:grid-cols-4"
                 >
-                    <div class="flex items-center gap-2">
-                        <span
-                            class="size-2 rounded-full"
-                            :style="{ backgroundColor: kpi.color }"
-                            aria-hidden="true"
-                        />
-                        <h2 class="text-[13px]/5 text-(--ds-text-muted)">
+                    <div
+                        v-for="kpi in kpis"
+                        :key="kpi.label"
+                        class="relative flex min-w-0 flex-col gap-1.5 border-(--ds-divider) px-5 py-4 not-first:max-sm:border-t sm:even:border-l xl:not-first:border-l sm:[&:nth-child(n+3)]:max-xl:border-t"
+                    >
+                        <dt
+                            class="font-ui-mono text-[10.5px]/4 tracking-[0.08em] text-(--ds-text-faint) uppercase"
+                        >
                             <Link
                                 v-if="kpi.href"
                                 :href="kpi.href"
@@ -768,37 +699,43 @@ const focusRing =
                                 >{{ kpi.label }}</Link
                             >
                             <template v-else>{{ kpi.label }}</template>
-                        </h2>
+                        </dt>
+                        <dd class="flex items-baseline gap-2 font-ui-mono">
+                            <span
+                                class="text-[22px]/7 font-medium tracking-[-0.03em] tabular-nums"
+                                >{{ kpi.value }}</span
+                            >
+                            <span
+                                class="truncate text-[11px]/4 uppercase"
+                                :class="kpi.noteTone"
+                                >{{ kpi.note }}</span
+                            >
+                        </dd>
                     </div>
-                    <p class="flex items-baseline gap-2 font-ui-mono">
-                        <span
-                            class="text-[24px]/7 font-medium tracking-[-0.03em] tabular-nums"
-                            >{{ kpi.value }}</span
-                        >
-                        <span
-                            class="truncate text-[12px]/4"
-                            :class="kpi.noteTone"
-                            >{{ kpi.note }}</span
-                        >
-                    </p>
-                    <DotColumns
-                        v-if="kpi.chart.kind === 'columns'"
-                        :values="kpi.chart.values"
-                        :color="kpi.color"
-                    />
-                    <DotGrid
-                        v-else
-                        :groups="kpi.chart.groups"
-                        :total="kpi.chart.total"
-                        :columns="kpi.chart.columns"
-                        :rows="kpi.chart.rows"
-                    />
+                </dl>
+                <div class="px-5 pt-4 pb-3">
                     <p
-                        class="flex justify-between gap-3 font-ui-mono text-[11px]/4 text-(--ds-text-faint)"
+                        class="font-ui-mono text-[10.5px]/4 tracking-[0.08em] text-(--ds-text-faint) uppercase"
                     >
-                        <span class="truncate">{{ kpi.caption[0] }}</span>
-                        <span class="shrink-0">{{ kpi.caption[1] }}</span>
+                        {{
+                            $t('CPU · :count machines · last hour', {
+                                count: String(stats.machines),
+                            })
+                        }}
                     </p>
+                    <div class="mt-3 h-64">
+                        <RidgeChart
+                            :values="stats.cpuTimeline"
+                            :labels="cpuLabels"
+                            :ticks="cpuTicks"
+                            :threshold="{
+                                value: BUSY_CPU,
+                                label: `${BUSY_CPU}%`,
+                                note: $t('busy line'),
+                            }"
+                            :label="$t('Average CPU over the last hour')"
+                        />
+                    </div>
                 </div>
             </section>
 
