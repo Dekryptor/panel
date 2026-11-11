@@ -2,8 +2,15 @@
 import { trans } from 'laravel-vue-i18n';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
-import { SolarWorkflow as WorkflowIcon } from '@/lib/solarIcons';
+import {
+    SolarClock,
+    SolarGitBranch,
+    SolarPlay,
+    SolarSiren,
+    SolarWorkflow as WorkflowIcon,
+} from '@/lib/solarIcons';
 import { computed, onMounted, ref } from 'vue';
+import type { Component } from 'vue';
 import { toast } from '@/lib/toast';
 import {
     Dialog,
@@ -122,8 +129,73 @@ const runTone: Record<string, string> = {
     cancelled: 'bg-(--ds-text-faint)',
 };
 
-const columns =
-    'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 md:grid-cols-[minmax(0,1.6fr)_minmax(10rem,1fr)_8rem_6rem_4.5rem]';
+type Group = 'deploys' | 'incidents' | 'scheduled' | 'manual';
+
+const groups: {
+    key: Group;
+    label: string;
+    icon: Component;
+    tone: string;
+    triggers: string[];
+}[] = [
+    {
+        key: 'deploys',
+        label: trans('Deploys'),
+        icon: SolarGitBranch,
+        tone: 'text-(--ds-text)',
+        triggers: ['git.push', 'deploy.finished', 'webhook'],
+    },
+    {
+        key: 'incidents',
+        label: trans('Incidents'),
+        icon: SolarSiren,
+        tone: 'text-(--ds-amber)',
+        triggers: [
+            'service.down',
+            'service.crash_loop',
+            'monitor.down',
+            'monitor.up',
+            'machine.offline',
+            'machine.disk_full',
+            'backup.failed',
+        ],
+    },
+    {
+        key: 'scheduled',
+        label: trans('Scheduled'),
+        icon: SolarClock,
+        tone: 'text-(--ds-blue)',
+        triggers: ['schedule'],
+    },
+    {
+        key: 'manual',
+        label: trans('By hand'),
+        icon: SolarPlay,
+        tone: 'text-(--ds-text-muted)',
+        triggers: ['manual'],
+    },
+];
+
+function groupOf(row: WorkflowRow) {
+    return (
+        groups.find((group) => group.triggers.includes(row.trigger)) ??
+        groups[3]
+    );
+}
+
+const shownGroups = computed(() =>
+    groups.filter((group) =>
+        props.workflows.some((row) => groupOf(row).key === group.key),
+    ),
+);
+
+const filter = ref<Group | null>(null);
+
+const shown = computed(() =>
+    filter.value === null
+        ? props.workflows
+        : props.workflows.filter((row) => groupOf(row).key === filter.value),
+);
 const focusRing =
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--ds-ring)';
 </script>
@@ -140,17 +212,6 @@ const focusRing =
                 ) +
                 ' '
             }}
-        </template>
-
-        <template v-if="canManage && planAllows && workflows.length" #actions>
-            <button
-                type="button"
-                :class="appButtonClasses('primary')"
-                :disabled="!planAllows"
-                @click="picking = true"
-            >
-                <Plus class="size-3.5" /> {{ $t('New workflow') + ' ' }}
-            </button>
         </template>
 
         <PlanLock
@@ -198,101 +259,116 @@ const focusRing =
                 />
             </div>
 
-            <div
-                v-else
-                class="ds-tile overflow-x-auto"
-                role="table"
-                :aria-label="$t('Workflows')"
-            >
-                <div
-                    class="ds-tile-head hidden h-9.5 border-b border-(--ds-divider) px-5 text-xs/4 font-medium text-(--ds-text-muted) md:grid"
-                    :class="columns"
-                    role="row"
-                >
-                    <span role="columnheader">{{ $t('Workflow') }}</span>
-                    <span role="columnheader">{{ $t('Starts when') }}</span>
-                    <span role="columnheader">{{ $t('Last run') }}</span>
-                    <span role="columnheader" class="text-right">{{
-                        $t('7 days')
-                    }}</span>
-                    <span role="columnheader" class="text-right">{{
-                        $t('Status')
-                    }}</span>
+            <div v-else class="flex flex-col gap-4">
+                <div class="flex flex-wrap items-center gap-2">
+                    <div
+                        class="ds-segments"
+                        role="group"
+                        :aria-label="$t('Show')"
+                    >
+                        <button
+                            type="button"
+                            :aria-pressed="filter === null"
+                            @click="filter = null"
+                        >
+                            {{ $t('All') }}
+                        </button>
+                        <button
+                            v-for="group in shownGroups"
+                            :key="group.key"
+                            type="button"
+                            :aria-pressed="filter === group.key"
+                            @click="filter = group.key"
+                        >
+                            {{ group.label }}
+                        </button>
+                    </div>
+                    <button
+                        v-if="canManage && planAllows"
+                        type="button"
+                        class="ml-auto"
+                        :class="appButtonClasses('primary')"
+                        @click="picking = true"
+                    >
+                        <Plus class="size-3.5" /> {{ $t('New workflow') + ' ' }}
+                    </button>
                 </div>
-                <Link
-                    v-for="w in workflows"
-                    :key="w.id"
-                    :href="`/workflows/${w.id}`"
-                    class="ds-tile-row px-5 py-3 text-[13px]/4 transition-colors hover:bg-(--ds-row-hover)"
-                    :class="[columns, focusRing]"
-                    role="row"
+
+                <ul
+                    class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                    :aria-label="$t('Workflows')"
                 >
-                    <span class="flex min-w-0 flex-col gap-0.5" role="cell">
-                        <span class="truncate font-medium">{{ w.name }}</span>
-                        <span class="truncate text-xs text-(--ds-text-muted)">
-                            {{ w.steps }}
-                            {{ w.steps === 1 ? $t('step') : $t('steps')
-                            }}<template v-if="w.description">
-                                · {{ w.description }}</template
+                    <li v-for="w in shown" :key="w.id">
+                        <Link
+                            :href="`/workflows/${w.id}`"
+                            class="flex h-full min-h-38 flex-col rounded-[12px] bg-(--ds-card) p-4 shadow-[inset_0_0_0_1px_var(--ds-border)] transition-colors hover:bg-(--ds-hover)"
+                            :class="focusRing"
+                        >
+                            <span
+                                class="truncate text-[15px]/5 font-medium tracking-[-0.01em]"
+                                :class="
+                                    w.enabled
+                                        ? 'text-(--ds-text)'
+                                        : 'text-(--ds-text-faint)'
+                                "
+                                >{{ w.name }}</span
                             >
-                        </span>
-                    </span>
-                    <span
-                        class="hidden min-w-0 flex-col gap-0.5 md:flex"
-                        role="cell"
-                    >
-                        <span class="truncate">{{ triggerLabel(w) }}</span>
-                        <span
-                            v-if="w.nextRunAt"
-                            class="text-xs text-(--ds-text-muted)"
-                            >{{
-                                $t('next :value', {
-                                    value: new Date(w.nextRunAt).toLocaleString(
-                                        undefined,
-                                        {
-                                            weekday: 'short',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                        },
-                                    ),
-                                })
-                            }}</span
-                        >
-                    </span>
-                    <span class="hidden items-center gap-2 md:flex" role="cell">
-                        <span
-                            v-if="w.lastRun"
-                            class="size-1.5 rounded-full"
-                            :class="runTone[w.lastRun.state]"
-                        />
-                        <span class="text-(--ds-text-secondary) tabular-nums">{{
-                            ago(w.lastRunAt)
-                        }}</span>
-                    </span>
-                    <span
-                        class="hidden text-right tabular-nums md:block"
-                        role="cell"
-                    >
-                        {{ w.runs7d }}
-                        <span v-if="w.failed7d" class="text-(--ds-red)">{{
-                            $t('· :failed7d failed', {
-                                failed7d: String(w.failed7d ?? ''),
-                            })
-                        }}</span>
-                    </span>
-                    <span class="text-right" role="cell">
-                        <span
-                            class="rounded-full px-2 py-0.5 text-xs/4 font-medium"
-                            :class="
-                                w.enabled
-                                    ? 'bg-(--ds-green)/12 text-(--ds-green)'
-                                    : 'bg-(--ds-hover) text-(--ds-text-muted)'
-                            "
-                        >
-                            {{ w.enabled ? $t('On') : $t('Off') }}
-                        </span>
-                    </span>
-                </Link>
+                            <span
+                                class="mt-1 line-clamp-2 text-[13px]/5 text-(--ds-text-muted)"
+                            >
+                                {{
+                                    w.description ||
+                                    `${w.steps} ${w.steps === 1 ? $t('step') : $t('steps')}`
+                                }}
+                            </span>
+                            <span
+                                class="mt-auto flex items-end justify-between gap-3 pt-5"
+                            >
+                                <span
+                                    class="flex min-w-0 flex-col gap-0.5 text-[12.5px]/4"
+                                >
+                                    <span
+                                        class="truncate text-(--ds-text-secondary)"
+                                        >{{ triggerLabel(w) }}</span
+                                    >
+                                    <span
+                                        class="flex items-center gap-1.5 truncate text-(--ds-text-faint) tabular-nums"
+                                    >
+                                        <span
+                                            v-if="w.lastRun"
+                                            class="size-1.5 shrink-0 rounded-full"
+                                            :class="runTone[w.lastRun.state]"
+                                        />
+                                        <template v-if="!w.enabled">{{
+                                            $t('Off')
+                                        }}</template>
+                                        <template v-else>{{
+                                            ago(w.lastRunAt)
+                                        }}</template>
+                                        <span
+                                            v-if="w.failed7d"
+                                            class="text-(--ds-red)"
+                                            >{{
+                                                $t('· :failed7d failed', {
+                                                    failed7d: String(
+                                                        w.failed7d,
+                                                    ),
+                                                })
+                                            }}</span
+                                        >
+                                    </span>
+                                </span>
+                                <component
+                                    :is="groupOf(w).icon"
+                                    class="size-7 shrink-0"
+                                    :class="groupOf(w).tone"
+                                    :stroke-width="1.6"
+                                    aria-hidden="true"
+                                />
+                            </span>
+                        </Link>
+                    </li>
+                </ul>
             </div>
         </PlanLock>
 
