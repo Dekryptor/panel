@@ -2821,6 +2821,36 @@ html.dark
     border-radius: 10px;
 }
 
+.dark .ds-tile {
+    --tile-bg: #131313;
+    --tile-edge: #262626;
+    --tile-inset: rgb(0 0 0 / 0.45);
+    --tile-rule: rgb(238 238 238 / 0.06);
+
+    box-shadow:
+        var(--tile-edge) 0 0 0 1px,
+        var(--tile-inset) 0 0 0 1px inset,
+        rgb(255 255 255 / 0.025) 0 2px 0 -1px inset;
+}
+
+.dark .ds-tray {
+    background-color: #0f0f0f;
+    box-shadow:
+        #232323 0 0 0 1px,
+        rgb(0 0 0 / 0.55) 0 0 0 1px inset;
+
+    & > .ds-tile {
+        --tile-bg: #181818;
+        --tile-edge: #262626;
+        --tile-inset: transparent;
+
+        box-shadow:
+            var(--tile-edge) 0 0 0 1px,
+            rgb(255 255 255 / 0.035) 0 1px 0 inset,
+            rgb(0 0 0 / 0.45) 0 1px 2px;
+    }
+}
+
 :root {
     --ds-menu: #ffffff;
     --ds-menu-icon: #8e8e88;
