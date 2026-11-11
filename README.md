@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="https://serveros.com"><img alt="The ServerOS dashboard: machines, average CPU, last backup and each machine's services" src=".github/assets/dashboard.png" width="900"></a>
+  <a href="https://serveros.com"><img alt="The ServerOS dashboard: machines, services, average CPU and backups, a CPU chart for the last 24 hours, and the machines list" src=".github/assets/dashboard.png" width="900"></a>
 </p>
 
 ServerOS runs the Linux servers you already own from one place. Connect a VPS from any provider with one command, then deploy apps, sites and databases, watch them, back them up and fix them, without living in a terminal. Your servers stay with your provider, on your account.
