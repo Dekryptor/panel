@@ -149,6 +149,42 @@ test('the old subdomain hands people over to the domain, signed in', function ()
     $this->assertGuest();
 });
 
+test('a hand-off works only for the browser it was made for', function () {
+    [$workspace] = domainWorkspace();
+    liveDomain($workspace);
+    $sub = 'https://'.$workspace->subdomain();
+    $go = fn () => $this->actingAs($workspace->owner)->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
+        ->withHeader('User-Agent', 'Owner browser')->get("{$sub}/domains/go?to=/machines")->headers->get('Location');
+
+    $link = $go();
+    auth()->logout();
+    $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.9'])->withHeader('User-Agent', 'Owner browser')->get($link)->assertRedirect('/login');
+    $this->assertGuest();
+
+    $link = $go();
+    auth()->logout();
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])->withHeader('User-Agent', 'curl')->get($link)->assertRedirect('/login');
+    $this->assertGuest();
+
+    $link = $go();
+    auth()->logout();
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])->withHeader('User-Agent', 'Owner browser')->get($link)->assertRedirect('/machines');
+    $this->assertAuthenticatedAs($workspace->owner);
+});
+
+test('a live domain that stops pointing here stops getting hand-offs', function () {
+    [$workspace] = domainWorkspace();
+    $domain = liveDomain($workspace);
+    expect(CustomDomains::dashboardHostFor($workspace->slug))->toBe('ops.acme.test');
+
+    cfLive([]);
+    $domain->forceFill(['checked_at' => now()->subMinutes(11)])->save();
+    $this->artisan('domains:check')->assertSuccessful();
+
+    expect($domain->fresh()->state)->not->toBe('active')
+        ->and(CustomDomains::dashboardHostFor($workspace->slug))->toBeNull();
+});
+
 test('the hand-off carries what a package adds to it, and gives it back there', function () {
     [$workspace] = domainWorkspace();
     liveDomain($workspace);

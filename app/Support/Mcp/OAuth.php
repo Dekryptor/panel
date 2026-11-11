@@ -102,7 +102,7 @@ final class OAuth
             'authorization_servers' => [self::issuer()],
             'scopes_supported' => Scopes::ALL,
             'bearer_methods_supported' => ['header'],
-            'resource_name' => "ServerOS · {$workspace->name}",
+            'resource_name' => 'ServerOS',
             'resource_documentation' => 'https://docs.'.config('app.domain').'/',
         ];
     }

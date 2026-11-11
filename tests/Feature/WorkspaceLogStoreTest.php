@@ -68,6 +68,9 @@ test('the form refuses bad details and private hosts', function () {
     foreach (['127.0.0.1', '10.0.0.5', '169.254.169.254', 'localhost'] as $private) {
         $this->actingAs($workspace->owner)->put(logStorageUrl($workspace), logStorageForm(['host' => $private]))->assertSessionHasErrors('host');
     }
+    foreach (["x' host=10.0.0.5 dbname='postgres", 'logs;host=127.0.0.1', "logs\nhost=127.0.0.1"] as $sneaky) {
+        $this->actingAs($workspace->owner)->put(logStorageUrl($workspace), logStorageForm(['database' => $sneaky]))->assertSessionHasErrors('database');
+    }
 
     expect(WorkspaceLogStore::query()->count())->toBe(0);
 });

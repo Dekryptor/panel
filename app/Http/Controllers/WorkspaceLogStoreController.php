@@ -204,15 +204,16 @@ class WorkspaceLogStoreController extends Controller
         $data = $request->validate([
             'host' => ['required', 'string', 'max:253', 'regex:/^[A-Za-z0-9.\-:\[\]]+$/'],
             'port' => ['required', 'integer', 'between:1,65535'],
-            'database' => ['required', 'string', 'max:63'],
+            'database' => ['required', 'string', 'max:63', 'regex:/^[A-Za-z0-9_][A-Za-z0-9_.\-]*$/'],
             'username' => ['required', 'string', 'max:63'],
             'password' => [$store === null ? 'required' : 'nullable', 'string', 'max:200'],
         ], [
             'host.regex' => __('Use the database’s host name or IP address, like db.example.com.'),
+            'database.regex' => __('Use the database’s name, like defaultdb: letters, numbers, dots, dashes and underscores.'),
         ]);
 
         $host = strtolower(trim($data['host'], " []\t\n"));
-        if ($host !== ($store?->host) && app(HostResolver::class)->resolve($host) === []) {
+        if (app(HostResolver::class)->resolve($host) === []) {
             throw ValidationException::withMessages(['host' => __('That host doesn’t resolve to a public address.')]);
         }
 

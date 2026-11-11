@@ -11,7 +11,7 @@ class CheckDomains extends Command
 {
     protected $signature = 'domains:check';
 
-    protected $description = 'Check workspace domains waiting on DNS and certificates';
+    protected $description = 'Check workspace domains waiting on DNS and certificates, and that active ones still point here';
 
     public function handle(CustomDomains $domains): int
     {
@@ -35,6 +35,14 @@ class CheckDomains extends Command
 
                 continue;
             }
+            $domains->refresh($domain);
+        }
+
+        $active = WorkspaceDomain::query()->where('state', 'active')->whereNotNull('hostname')
+            ->when($direct, fn ($query) => $query->whereNull('cloudflare_id'), fn ($query) => $query->whereNotNull('cloudflare_id'))
+            ->where(fn ($query) => $query->whereNull('checked_at')->orWhere('checked_at', '<=', now()->subMinutes(10)))
+            ->get();
+        foreach ($active as $domain) {
             $domains->refresh($domain);
         }
 

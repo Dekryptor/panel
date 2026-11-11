@@ -160,6 +160,7 @@ class WorkspaceDomainController extends Controller
         }
         Cache::put("domain-handoff:{$token}", [
             'user' => $request->user()->id, 'host' => $host, 'to' => $to,
+            'ip' => $request->ip(), 'agent' => hash('sha256', (string) $request->userAgent()),
             'via' => $request->session()->get(GoogleTeamAccess::VIA),
             'hd' => $request->session()->get(GoogleTeamAccess::HD),
             ...$carried,
@@ -172,7 +173,9 @@ class WorkspaceDomainController extends Controller
     {
         $handoff = Cache::pull("domain-handoff:{$token}");
         $host = $request->attributes->get('custom_domain');
-        if (! is_array($handoff) || $handoff['host'] !== $host) {
+        if (! is_array($handoff) || $handoff['host'] !== $host
+            || ! hash_equals((string) ($handoff['ip'] ?? ''), (string) $request->ip())
+            || ! hash_equals((string) ($handoff['agent'] ?? ''), hash('sha256', (string) $request->userAgent()))) {
             return redirect('/login');
         }
 
