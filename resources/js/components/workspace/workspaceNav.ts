@@ -33,6 +33,7 @@ import fixes from '@/routes/workspace/fixes';
 import workflows from '@/routes/workspace/workflows';
 import members from '@/routes/workspace/members';
 import settings from '@/routes/workspace/settings';
+import { useSettingsNav } from '@/components/workspace/settingsNav';
 import type { Workspace } from '@/types';
 
 const icons = {
@@ -63,6 +64,7 @@ export type WorkspaceNavItem = {
 export type WorkspaceNavChild = {
     key: string;
     label: string;
+    icon: Component;
     href: string;
     active: boolean;
 };
@@ -80,6 +82,8 @@ export function useWorkspaceNav(): ComputedRef<WorkspaceNavItem[]> {
         isPartner?: boolean;
         extensions?: { nav: ExtensionNavItem[] } | null;
     }>();
+
+    const settingsNav = useSettingsNav();
 
     return computed(() => {
         const slug = page.props.workspace?.slug;
@@ -209,30 +213,16 @@ export function useWorkspaceNav(): ComputedRef<WorkspaceNavItem[]> {
                     page.component.startsWith('workspace/settings/') &&
                     page.component !== 'workspace/settings/Members',
                 group: 'workspace',
-                children: (
-                    [
-                        ['General', 'General', settings.general],
-                        ['Domains', 'Domains', settings.domains],
-                        ['Status page', 'StatusPage', settings.statusPage],
-                        [
-                            'Machine policies',
-                            'MachinePolicies',
-                            settings.machinePolicies,
-                        ],
-                        ['Log storage', 'LogStorage', settings.logStorage],
-                        ['API', 'Api', settings.api],
-                        ['AI and MCP', 'Mcp', settings.mcp],
-                        ['Profile', 'Profile', settings.profile],
-                        ['Appearance', 'Appearance', settings.appearance],
-                        ['Security', 'Security', settings.security],
-                    ] as const
-                ).map(([label, component, route]) => ({
-                    key: component,
-                    label: trans(label),
-                    href: onWorkspace(route(slug)).url,
-                    active:
-                        page.component === `workspace/settings/${component}`,
-                })),
+                children: settingsNav.value
+                    .flatMap((group) => group.items)
+                    .filter((item) => item.key !== 'workspace/settings/Members')
+                    .map((item) => ({
+                        key: item.key,
+                        label: item.label,
+                        icon: item.icon,
+                        href: item.href,
+                        active: item.current,
+                    })),
             },
         ];
 

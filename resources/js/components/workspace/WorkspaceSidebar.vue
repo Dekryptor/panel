@@ -548,6 +548,17 @@ const rowClass =
                                             pending = `${row.key}/${child.key}`
                                         "
                                     >
+                                        <component
+                                            :is="child.icon"
+                                            class="size-[15px] shrink-0"
+                                            :class="
+                                                currentKey ===
+                                                `${row.key}/${child.key}`
+                                                    ? 'text-(--ds-text)'
+                                                    : 'text-(--ds-text-muted)'
+                                            "
+                                            :stroke-width="1.6"
+                                        />
                                         <span class="truncate">{{
                                             child.label
                                         }}</span>

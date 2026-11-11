@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Search } from '@lucide/vue';
-import { trans } from 'laravel-vue-i18n';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import {
     computed,
@@ -11,321 +10,16 @@ import {
     useTemplateRef,
     watch,
 } from 'vue';
-import type { Component } from 'vue';
 import WorkspacePage from '@/components/workspace/WorkspacePage.vue';
-import {
-    SolarBuilding2,
-    SolarCode,
-    SolarDatabase,
-    SolarGlobe,
-    SolarLockKeyhole,
-    SolarPalette,
-    SolarPulse,
-    SolarServerCog,
-    SolarSparkles,
-    SolarUserRound,
-    SolarUsers,
-} from '@/lib/solarIcons';
-import { extensionIcon } from '@/lib/extensionIcons';
-import { onWorkspace } from '@/lib/workspaceRoute';
-import members from '@/routes/workspace/members';
-import settings from '@/routes/workspace/settings';
+import { useSettingsNav } from '@/components/workspace/settingsNav';
+import type { Result } from '@/components/workspace/settingsNav';
+import { useNavLayout } from '@/composables/useNavLayout';
 import type { Workspace } from '@/types';
 
-type Section = {
-    label: string;
-    anchor: string;
-    keywords?: string;
-};
-
-type NavItem = {
-    label: string;
-    icon: Component;
-    href: string;
-    current: boolean;
-    keywords: string;
-    sections: Section[];
-};
-
-type Result = {
-    key: string;
-    label: string;
-    page: string | null;
-    icon: Component;
-    href: string;
-};
-
-type ExtensionSettingsItem = {
-    key: string;
-    label: string;
-    icon: string;
-    path: string;
-    group: string;
-    component: string;
-    keywords: string;
-    sections: Section[];
-};
-
-type Group = { key: string; label: string; items: NavItem[] };
-
-const page = usePage<{
-    workspace: Workspace;
-    extensions?: { settings: ExtensionSettingsItem[] } | null;
-}>();
-
-const groups = computed<Group[]>(() =>
-    withExtensions(ownGroups(), page.props.extensions?.settings ?? []),
-);
-
-function withExtensions(
-    own: Group[],
-    extensions: ExtensionSettingsItem[],
-): Group[] {
-    return own.map((group) => ({
-        ...group,
-        items: [
-            ...group.items,
-            ...extensions
-                .filter((extension) => extension.group === group.key)
-                .map((extension) => ({
-                    label: extension.label,
-                    icon: extensionIcon(extension.icon),
-                    href: extension.path,
-                    current: page.component === extension.component,
-                    keywords: extension.keywords,
-                    sections: extension.sections,
-                })),
-        ],
-    }));
-}
-
-function ownGroups(): Group[] {
-    const slug = page.props.workspace.slug;
-    const item = (
-        label: string,
-        icon: Component,
-        href: string,
-        component: string,
-        keywords: string,
-        sections: Section[] = [],
-    ): NavItem => ({
-        label,
-        icon,
-        href,
-        current: page.component === `workspace/settings/${component}`,
-        keywords,
-        sections,
-    });
-
-    return [
-        {
-            key: 'workspace',
-            label: trans('Workspace'),
-            items: [
-                item(
-                    trans('General'),
-                    SolarBuilding2,
-                    onWorkspace(settings.general(slug)).url,
-                    'General',
-                    'name logo address',
-                    [
-                        {
-                            label: trans('Alerts'),
-                            anchor: 'alerts',
-                            keywords:
-                                'notifications email webhook slack discord mute',
-                        },
-                        {
-                            label: 'GitHub',
-                            anchor: 'github',
-                            keywords: 'git repositories repos deploy connect',
-                        },
-                        {
-                            label: trans('Danger zone'),
-                            anchor: 'danger-zone',
-                            keywords: 'delete workspace remove',
-                        },
-                    ],
-                ),
-                item(
-                    trans('Members'),
-                    SolarUsers,
-                    onWorkspace(members.index(slug)).url,
-                    'Members',
-                    'team people users',
-                    [
-                        {
-                            label: trans('Invite people'),
-                            anchor: 'invite',
-                            keywords: 'add teammate email',
-                        },
-                        {
-                            label: trans('Pending invites'),
-                            anchor: 'invites',
-                            keywords: 'invitations',
-                        },
-                        {
-                            label: trans('Roles'),
-                            anchor: 'roles',
-                            keywords: 'permissions admin owner access',
-                        },
-                    ],
-                ),
-                item(
-                    trans('Domains'),
-                    SolarGlobe,
-                    onWorkspace(settings.domains(slug)).url,
-                    'Domains',
-                    'custom domain dns cname ssl',
-                ),
-                item(
-                    trans('Status page'),
-                    SolarPulse,
-                    onWorkspace(settings.statusPage(slug)).url,
-                    'StatusPage',
-                    'public uptime incidents',
-                ),
-            ],
-        },
-        {
-            key: 'machines',
-            label: trans('Machines'),
-            items: [
-                item(
-                    trans('Machine policies'),
-                    SolarServerCog,
-                    onWorkspace(settings.machinePolicies(slug)).url,
-                    'MachinePolicies',
-                    'daemon updates releases collect metrics defaults groups',
-                ),
-                item(
-                    trans('Log storage'),
-                    SolarDatabase,
-                    onWorkspace(settings.logStorage(slug)).url,
-                    'LogStorage',
-                    'logs s3 bucket retention',
-                ),
-            ],
-        },
-        {
-            key: 'developers',
-            label: trans('Developers'),
-            items: [
-                item(
-                    'API',
-                    SolarCode,
-                    onWorkspace(settings.api(slug)).url,
-                    'Api',
-                    'rest tokens',
-                    [
-                        {
-                            label: trans('API keys'),
-                            anchor: 'api-keys',
-                            keywords: 'tokens',
-                        },
-                        {
-                            label: trans('Recent requests'),
-                            anchor: 'requests',
-                        },
-                    ],
-                ),
-                item(
-                    trans('AI and MCP'),
-                    SolarSparkles,
-                    onWorkspace(settings.mcp(slug)).url,
-                    'Mcp',
-                    'claude chatgpt cursor assistant',
-                    [
-                        {
-                            label: trans('Connect an AI app'),
-                            anchor: 'connect',
-                        },
-                        {
-                            label: trans('AI tool calls'),
-                            anchor: 'tool-calls',
-                            keywords: 'usage limit',
-                        },
-                        {
-                            label: trans('Keys and connected apps'),
-                            anchor: 'keys',
-                            keywords: 'tokens',
-                        },
-                    ],
-                ),
-            ],
-        },
-        {
-            key: 'account',
-            label: trans('Your account'),
-            items: [
-                item(
-                    trans('Profile'),
-                    SolarUserRound,
-                    onWorkspace(settings.profile(slug)).url,
-                    'Profile',
-                    'name avatar picture',
-                    [
-                        {
-                            label: trans('Your emails from this workspace'),
-                            anchor: 'emails',
-                            keywords: 'notifications digest unsubscribe',
-                        },
-                    ],
-                ),
-                item(
-                    trans('Appearance'),
-                    SolarPalette,
-                    onWorkspace(settings.appearance(slug)).url,
-                    'Appearance',
-                    'theme dark light mode navigation sidebar top bar layout',
-                ),
-                item(
-                    trans('Security'),
-                    SolarLockKeyhole,
-                    onWorkspace(settings.security(slug)).url,
-                    'Security',
-                    'login sign in',
-                    [
-                        {
-                            label: trans('Workspace security'),
-                            anchor: 'workspace-security',
-                            keywords: 'require two-factor 2fa',
-                        },
-                        {
-                            label: trans('Password'),
-                            anchor: 'password',
-                        },
-                        {
-                            label: trans('Connected accounts'),
-                            anchor: 'connected-accounts',
-                            keywords: 'google github sign in',
-                        },
-                        {
-                            label: trans('Two-factor authentication'),
-                            anchor: 'two-factor',
-                            keywords: '2fa authenticator otp recovery codes',
-                        },
-                        {
-                            label: trans('Passkeys'),
-                            anchor: 'passkeys',
-                            keywords: 'touch id face id security key',
-                        },
-                        {
-                            label: trans('Signed-in devices'),
-                            anchor: 'devices',
-                            keywords: 'sessions sign out',
-                        },
-                        {
-                            label: trans('Recent security activity'),
-                            anchor: 'security-activity',
-                            keywords: 'log history',
-                        },
-                    ],
-                ),
-            ],
-        },
-    ];
-}
+const page = usePage<{ workspace: Workspace }>();
+const groups = useSettingsNav();
+const { layout } = useNavLayout();
+const inSidebar = computed(() => layout.value === 'sidebar');
 
 const query = ref('');
 const searchInput = useTemplateRef<HTMLInputElement>('searchInput');
@@ -541,12 +235,17 @@ const focusRing =
             })
         "
     >
-        <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:gap-10">
+        <div
+            class="flex flex-col gap-6"
+            :class="{ 'xl:flex-row xl:items-start xl:gap-10': !inSidebar }"
+        >
             <div
-                class="flex shrink-0 flex-col gap-3 xl:sticky xl:top-6 xl:w-56 xl:gap-4"
+                class="flex shrink-0 flex-col gap-3"
+                :class="{ 'xl:sticky xl:top-6 xl:w-56 xl:gap-4': !inSidebar }"
             >
                 <label
-                    class="ds-raised-button w-full cursor-text focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-(--ds-ring) sm:max-w-80 xl:max-w-none"
+                    class="ds-raised-button w-full cursor-text focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-(--ds-ring) sm:max-w-80"
+                    :class="{ 'xl:max-w-none': !inSidebar }"
                 >
                     <Search
                         class="size-3.5 shrink-0 text-(--ds-text-muted)"
@@ -578,6 +277,7 @@ const focusRing =
                 </label>
 
                 <nav
+                    v-show="!inSidebar || searching"
                     id="settings-nav"
                     :aria-label="$t('Settings')"
                     class="-mx-4 overflow-x-auto px-4 sm:-mx-8 sm:px-8 xl:mx-0 xl:overflow-visible xl:px-0"
