@@ -1,6 +1,13 @@
 <script setup lang="ts">
 // Lit-ridge dot field after caffeine-day by Charles Postiaux (MIT).
-import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
+import {
+    computed,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    useTemplateRef,
+    watch,
+} from 'vue';
 import { useIsDark } from '@/composables/useAppearance';
 
 type Props = {
@@ -44,15 +51,24 @@ function clamp(v: number, lo: number, hi: number): number {
     return Math.min(hi, Math.max(lo, v));
 }
 
-function sample(position: number): number {
+function sample(position: number): number | null {
     const at = position * (values.length - 1);
     const i = Math.floor(at);
-    const a = values[i] ?? 0;
-    const b = values[Math.min(values.length - 1, i + 1)] ?? a;
+    const a = values[i];
+    const b = values[Math.min(values.length - 1, i + 1)];
     const t = at - i;
+
+    if (a === null || a === undefined) {
+        return t > 0.5 && b !== null && b !== undefined ? b : null;
+    }
+    if (b === null || b === undefined) {
+        return t < 0.5 ? a : null;
+    }
 
     return a + (b - a) * (t * t * (3 - 2 * t));
 }
+
+const empty = computed(() => values.every((value) => value === null));
 
 function palette() {
     const dark = isDark.value;
@@ -113,10 +129,11 @@ function draw(): void {
     const known = values.filter((v): v is number => v !== null);
     const peak = known.length ? Math.max(...known) : 0;
     const yMax = Math.max(10, peak * 1.6);
-    const series = Array.from(
-        { length: cols },
-        (_, i) => sample((i + 0.5) / cols) * grow,
-    );
+    const series = Array.from({ length: cols }, (_, i) => {
+        const value = sample((i + 0.5) / cols);
+
+        return value === null ? null : value * grow;
+    });
     const hotFrom = cols - Math.round((hot / values.length) * cols);
 
     const buckets: number[][] = Array.from({ length: LEVELS }, () => []);
@@ -126,10 +143,11 @@ function draw(): void {
 
     for (let col = 0; col < cols; col++) {
         const x = fx + (col + 0.5) * cw;
-        const ridge = (series[col] / yMax) * rows;
+        const here = series[col];
+        const ridge = here === null ? -1 : (here / yMax) * rows;
         const slope =
-            ((series[Math.min(cols - 1, col + 1)] -
-                series[Math.max(0, col - 1)]) /
+            (((series[Math.min(cols - 1, col + 1)] ?? here ?? 0) -
+                (series[Math.max(0, col - 1)] ?? here ?? 0)) /
                 yMax) *
             rows;
         const light = clamp(0.62 + slope * 1.1, 0.22, 1);
@@ -207,7 +225,7 @@ function draw(): void {
         ctx.fillText(str.toUpperCase(), x, y);
     };
 
-    if (threshold && threshold.value <= yMax) {
+    if (threshold && known.length > 0 && threshold.value <= yMax) {
         const y = Math.round(base - (threshold.value / yMax) * fh) + 0.5;
         ctx.strokeStyle = c.line;
         ctx.lineWidth = 1;
@@ -334,5 +352,16 @@ watch(
         @pointerleave="hover = null"
     >
         <canvas ref="canvas" class="absolute inset-0 size-full" />
+        <div
+            v-if="empty"
+            class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center gap-1 pr-24 text-center font-ui-mono text-[11px]/4 uppercase"
+        >
+            <span class="text-(--ds-text-secondary)">{{
+                $t('No CPU samples in the last hour')
+            }}</span>
+            <span class="text-(--ds-text-faint)">{{
+                $t('Machines report every minute while connected')
+            }}</span>
+        </div>
     </div>
 </template>
