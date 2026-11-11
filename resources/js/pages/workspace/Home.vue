@@ -222,25 +222,91 @@ const kpis = computed<Kpi[]>(() => {
     ];
 });
 
+type CpuRange = WorkspaceStats['cpuRange'];
+
+const cpuRanges: {
+    key: CpuRange;
+    label: string;
+    step: number;
+    span: string;
+    ticks: string[];
+}[] = [
+    {
+        key: '1h',
+        label: '1h',
+        step: 60_000,
+        span: trans('last hour'),
+        ticks: ['-60m', '-45m', '-30m', '-15m'],
+    },
+    {
+        key: '24h',
+        label: '24h',
+        step: 900_000,
+        span: trans('last 24 hours'),
+        ticks: ['-24h', '-18h', '-12h', '-6h'],
+    },
+    {
+        key: '7d',
+        label: '7d',
+        step: 7_200_000,
+        span: trans('last 7 days'),
+        ticks: ['-7d', '-5d', '-3.5d', '-2d'],
+    },
+    {
+        key: '30d',
+        label: '30d',
+        step: 28_800_000,
+        span: trans('last 30 days'),
+        ticks: ['-30d', '-22d', '-15d', '-7d'],
+    },
+];
+
+const cpuRange = computed(
+    () =>
+        cpuRanges.find((range) => range.key === props.stats.cpuRange) ??
+        cpuRanges[1],
+);
+
+const loadingRange = ref<CpuRange | null>(null);
+
+function pickRange(key: CpuRange): void {
+    if (key === props.stats.cpuRange) return;
+    loadingRange.value = key;
+    router.reload({
+        data: { range: key },
+        only: ['stats'],
+        onFinish: () => (loadingRange.value = null),
+    });
+}
+
 const cpuLabels = computed(() => {
     const now = Date.now();
     const count = props.stats.cpuTimeline.length;
+    const { step } = cpuRange.value;
+    const short = step < 3_600_000;
 
     return props.stats.cpuTimeline.map((_, index) =>
-        new Date(now - (count - 1 - index) * 60_000).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-        }),
+        new Date(now - (count - 1 - index) * step).toLocaleString(
+            [],
+            short
+                ? { hour: '2-digit', minute: '2-digit' }
+                : {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                  },
+        ),
     );
 });
 
-const cpuTicks = [
-    { at: 0, label: '-60m' },
-    { at: 0.25, label: '-45m' },
-    { at: 0.5, label: '-30m' },
-    { at: 0.75, label: '-15m' },
+const cpuTicks = computed(() => [
+    ...cpuRange.value.ticks.map((label, index) => ({
+        at: index / 4,
+        label,
+    })),
     { at: 1, label: trans('now') },
-];
+]);
 
 const connectionTone: Record<NonNullable<Machine['connection']>, string> = {
     online: 'bg-(--ds-green)',
@@ -714,15 +780,42 @@ const focusRing =
                     </div>
                 </dl>
                 <div class="px-5 pt-4 pb-3">
-                    <p
-                        class="font-ui-mono text-[10.5px]/4 tracking-[0.08em] text-(--ds-text-faint) uppercase"
-                    >
-                        {{
-                            $t('CPU · :count machines · last hour', {
-                                count: String(stats.machines),
-                            })
-                        }}
-                    </p>
+                    <div class="flex items-center justify-between gap-3">
+                        <p
+                            class="font-ui-mono text-[10.5px]/4 tracking-[0.08em] text-(--ds-text-faint) uppercase"
+                        >
+                            {{
+                                $t('CPU · :count machines · :span', {
+                                    count: String(stats.machines),
+                                    span: cpuRange.span,
+                                })
+                            }}
+                        </p>
+                        <div
+                            class="flex items-center gap-0.5 font-ui-mono text-[10.5px]/4 tracking-[0.06em] uppercase"
+                            role="group"
+                            :aria-label="$t('Time range')"
+                        >
+                            <button
+                                v-for="range in cpuRanges"
+                                :key="range.key"
+                                type="button"
+                                class="cursor-pointer rounded-[6px] px-2 py-1 transition-colors"
+                                :class="[
+                                    range.key === stats.cpuRange
+                                        ? 'bg-(--ds-active) text-(--ds-text)'
+                                        : 'text-(--ds-text-faint) hover:text-(--ds-text)',
+                                    loadingRange === range.key &&
+                                        'animate-pulse',
+                                    focusRing,
+                                ]"
+                                :aria-pressed="range.key === stats.cpuRange"
+                                @click="pickRange(range.key)"
+                            >
+                                {{ range.label }}
+                            </button>
+                        </div>
+                    </div>
                     <div class="mt-3 h-64">
                         <RidgeChart
                             :values="stats.cpuTimeline"
@@ -733,7 +826,11 @@ const focusRing =
                                 label: `${BUSY_CPU}%`,
                                 note: $t('busy line'),
                             }"
-                            :label="$t('Average CPU over the last hour')"
+                            :label="
+                                $t('Average CPU over the :span', {
+                                    span: cpuRange.span,
+                                })
+                            "
                         />
                     </div>
                 </div>
