@@ -3,7 +3,6 @@ import { trans } from 'laravel-vue-i18n';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { ArrowUpRight, Check } from '@lucide/vue';
 import {
-    SolarBadgePercent as BadgePercent,
     SolarBookOpen as BookOpen,
     SolarCircleHelp as CircleHelp,
     SolarLanguages as Languages,
@@ -166,81 +165,38 @@ const external = 'ml-auto size-3.5 text-(--ds-text-faint)';
                     {{ $t('Account settings') }}
                 </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem :class="row" @select="whatsNew.show()">
-                <Sparkles :class="icon" :stroke-width="1.6" />
-                {{ $t('What’s new') }}
-                <span
-                    v-if="whatsNew.unread.value"
-                    class="ml-auto rounded-full bg-(--ds-blue) px-1.5 text-[10.5px]/4 font-semibold text-white tabular-nums"
-                    >{{
-                        whatsNew.unread.value > 9 ? '9+' : whatsNew.unread.value
-                    }}</span
-                >
-            </DropdownMenuItem>
-            <DropdownMenuItem v-if="page.props.workspace && support" as-child>
-                <Link :href="support.path" :class="row">
-                    <CircleHelp :class="icon" :stroke-width="1.6" />
-                    {{ support.label }}
-                </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem as-child>
-                <a :href="docs" target="_blank" rel="noopener" :class="row">
-                    <BookOpen :class="icon" :stroke-width="1.6" />
-                    {{ $t('Docs') }}
-                    <ArrowUpRight :class="external" :stroke-width="1.75" />
-                </a>
-            </DropdownMenuItem>
-            <DropdownMenuItem as-child>
-                <a :href="feedback" target="_blank" rel="noopener" :class="row">
-                    <MessageSquare :class="icon" :stroke-width="1.6" />
-                    {{ $t('Feedback') }}
-                    <ArrowUpRight :class="external" :stroke-width="1.75" />
-                </a>
-            </DropdownMenuItem>
-            <DropdownMenuItem v-if="page.props.staff?.sales" as-child>
-                <a :href="`${page.props.appUrl}/admin/sales`" :class="row">
-                    <BadgePercent :class="icon" :stroke-width="1.6" />
-                    {{ $t('Sales reps') }}
-                </a>
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator class="-mx-1.5 my-1.5" />
-            <div class="flex h-8 items-center justify-between gap-2 px-2">
-                <span
-                    class="flex items-center gap-2.5 text-[13.5px]/5 text-(--ds-text-secondary)"
-                >
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger :class="row">
                     <SunMoon :class="icon" :stroke-width="1.6" />
                     {{ $t('Theme') }}
-                </span>
-                <div
-                    class="flex items-center gap-0.5"
-                    role="radiogroup"
-                    :aria-label="$t('Theme')"
-                >
-                    <button
+                    <span class="ml-auto text-[13px] text-(--ds-text-faint)">{{
+                        $t(
+                            themes.find((theme) => theme.value === appearance)
+                                ?.label ?? 'System',
+                        )
+                    }}</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent class="ds-modal min-w-40 p-1.5 font-ui">
+                    <DropdownMenuItem
                         v-for="theme in themes"
                         :key="theme.value"
-                        type="button"
-                        role="radio"
-                        :aria-checked="appearance === theme.value"
-                        :aria-label="$t(theme.label)"
-                        :title="$t(theme.label)"
-                        class="flex size-6.5 cursor-pointer items-center justify-center rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-(--ds-ring)"
-                        :class="
-                            appearance === theme.value
-                                ? 'bg-(--ds-active) text-(--ds-text)'
-                                : 'text-(--ds-text-faint) hover:text-(--ds-text)'
-                        "
-                        @click="updateAppearance(theme.value)"
+                        :class="row"
+                        @select="updateAppearance(theme.value)"
                     >
                         <component
                             :is="theme.icon"
-                            class="size-3.5"
-                            :stroke-width="1.75"
+                            :class="icon"
+                            :stroke-width="1.6"
                         />
-                    </button>
-                </div>
-            </div>
+                        {{ $t(theme.label) }}
+                        <Check
+                            v-if="appearance === theme.value"
+                            class="ml-auto size-3.5 text-(--ds-text)"
+                            :stroke-width="2"
+                        />
+                    </DropdownMenuItem>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger :class="row">
                     <Languages :class="icon" :stroke-width="1.6" />
@@ -273,6 +229,71 @@ const external = 'ml-auto size-3.5 text-(--ds-text-faint)';
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
 
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger :class="row">
+                    <CircleHelp :class="icon" :stroke-width="1.6" />
+                    {{ $t('Help') }}
+                    <span
+                        v-if="whatsNew.unread.value"
+                        class="ml-auto size-1.5 rounded-full bg-(--ds-blue)"
+                        :aria-label="$t('New updates')"
+                    />
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent class="ds-modal min-w-48 p-1.5 font-ui">
+                    <DropdownMenuItem :class="row" @select="whatsNew.show()">
+                        <Sparkles :class="icon" :stroke-width="1.6" />
+                        {{ $t('What’s new') }}
+                        <span
+                            v-if="whatsNew.unread.value"
+                            class="ml-auto rounded-full bg-(--ds-blue) px-1.5 text-[10.5px]/4 font-semibold text-white tabular-nums"
+                            >{{
+                                whatsNew.unread.value > 9
+                                    ? '9+'
+                                    : whatsNew.unread.value
+                            }}</span
+                        >
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        v-if="page.props.workspace && support"
+                        as-child
+                    >
+                        <Link :href="support.path" :class="row">
+                            <CircleHelp :class="icon" :stroke-width="1.6" />
+                            {{ support.label }}
+                        </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem as-child>
+                        <a
+                            :href="docs"
+                            target="_blank"
+                            rel="noopener"
+                            :class="row"
+                        >
+                            <BookOpen :class="icon" :stroke-width="1.6" />
+                            {{ $t('Docs') }}
+                            <ArrowUpRight
+                                :class="external"
+                                :stroke-width="1.75"
+                            />
+                        </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem as-child>
+                        <a
+                            :href="feedback"
+                            target="_blank"
+                            rel="noopener"
+                            :class="row"
+                        >
+                            <MessageSquare :class="icon" :stroke-width="1.6" />
+                            {{ $t('Feedback') }}
+                            <ArrowUpRight
+                                :class="external"
+                                :stroke-width="1.75"
+                            />
+                        </a>
+                    </DropdownMenuItem>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator class="-mx-1.5 my-1.5" />
             <DropdownMenuItem as-child>
                 <Link

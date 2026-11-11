@@ -1,27 +1,19 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
+import { usePage } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
 import { Check, ChevronsUpDown, PinOff, Plus } from '@lucide/vue';
-import {
-    SolarPin as Pin,
-    SolarCreditCard as CreditCard,
-    SolarUserPlus as UserPlus,
-} from '@/lib/solarIcons';
+import { SolarPin as Pin } from '@/lib/solarIcons';
 import { computed, ref } from 'vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import CreateWorkspaceDialog from '@/components/workspace/CreateWorkspaceDialog.vue';
 import { usePinnedWorkspaces } from '@/composables/usePinnedWorkspaces';
-import { useUpgradeLink } from '@/composables/useUpgradeLink';
 import { useWorkspaceSwitch } from '@/composables/useWorkspaceSwitch';
 import { workspaceInitial, workspaceTileColor } from '@/lib/workspaceTile';
-import { onWorkspace } from '@/lib/workspaceRoute';
-import members from '@/routes/workspace/members';
 import type { Workspace, WorkspaceSummary } from '@/types';
 
 const { variant = 'inline' } = defineProps<{ variant?: 'inline' | 'block' }>();
@@ -30,7 +22,6 @@ const page = usePage<{ workspace: Workspace }>();
 
 const current = computed(() => page.props.workspace);
 const { isPinned, toggle: togglePin } = usePinnedWorkspaces();
-const upgrade = useUpgradeLink();
 
 const workspaces = computed(() => {
     const all = page.props.workspaces;
@@ -223,12 +214,7 @@ const icon = 'size-4 shrink-0 text-(--ds-text-muted)';
                     >
                         <button
                             type="button"
-                            class="pointer-events-auto flex size-6 cursor-pointer items-center justify-center rounded-md text-(--ds-text-faint) group-hover/row:opacity-100 hover:bg-(--ds-active) hover:text-(--ds-text) focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-(--ds-ring)"
-                            :class="
-                                isPinned(workspace)
-                                    ? 'opacity-100'
-                                    : 'opacity-0'
-                            "
+                            class="pointer-events-auto flex size-6 cursor-pointer items-center justify-center rounded-md text-(--ds-text-faint) opacity-0 group-hover/row:opacity-100 hover:bg-(--ds-active) hover:text-(--ds-text) focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-(--ds-ring)"
                             :aria-label="
                                 isPinned(workspace)
                                     ? $t('Unpin :name', {
@@ -275,23 +261,6 @@ const icon = 'size-4 shrink-0 text-(--ds-text-muted)';
                 >
                     <Plus :class="icon" :stroke-width="1.6" />
                     {{ $t('Create workspace') }}
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator class="-mx-1.5 my-1.5" />
-                <DropdownMenuItem as-child>
-                    <Link
-                        :href="onWorkspace(members.index(current.slug))"
-                        :class="row"
-                    >
-                        <UserPlus :class="icon" :stroke-width="1.6" />
-                        {{ $t('Invite members') }}
-                    </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem v-if="upgrade" as-child>
-                    <Link :href="upgrade.href" :class="row">
-                        <CreditCard :class="icon" :stroke-width="1.6" />
-                        {{ upgrade.label }}
-                    </Link>
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>

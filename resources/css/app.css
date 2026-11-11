@@ -2832,10 +2832,10 @@ html.dark
 }
 
 .dark {
-    --ds-menu: #0f0f0f;
+    --ds-menu: #1c1c1c;
     --ds-menu-icon: #a8a8a8;
-    --ds-menu-rule: #303030;
-    --ds-menu-hover: #1f1f1f;
+    --ds-menu-rule: #2e2e2e;
+    --ds-menu-hover: #272727;
     --ds-menu-shadow:
         rgb(255 255 255 / 0.06) 0 1px 0 inset, rgb(0 0 0 / 0.5) 0 1px 2px,
         rgb(0 0 0 / 0.6) 0 12px 32px -8px;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
-import { ArrowUpRight, PanelLeft, PinOff, Search } from '@lucide/vue';
+import { PanelLeft, PinOff, Search } from '@lucide/vue';
 import {
     computed,
     nextTick,
@@ -19,14 +19,7 @@ import type { WorkspaceNavItem } from '@/components/workspace/workspaceNav';
 import { useAssistant } from '@/composables/useAssistant';
 import { usePinnedWorkspaces } from '@/composables/usePinnedWorkspaces';
 import { useWorkspaceSwitch } from '@/composables/useWorkspaceSwitch';
-import { useWhatsNew } from '@/composables/useWhatsNew';
-import { docsUrl } from '@/lib/docs';
-import {
-    SolarAskAi,
-    SolarBookOpen,
-    SolarSupport,
-    SolarWhatsNew,
-} from '@/lib/solarIcons';
+import { SolarAskAi } from '@/lib/solarIcons';
 import { workspaceInitial, workspaceTileColor } from '@/lib/workspaceTile';
 import type { Workspace, WorkspaceSummary } from '@/types';
 
@@ -151,41 +144,6 @@ const allRows = computed(() =>
         .filter((group) => isOpen(group.key))
         .flatMap((group) => group.rows),
 );
-
-const whatsNew = useWhatsNew();
-
-const supportLinks = computed(() => {
-    const extensionNav =
-        (
-            page.props as {
-                extensions?: {
-                    nav: { key: string; label: string; path: string }[];
-                } | null;
-            }
-        ).extensions?.nav ?? [];
-    const support = extensionNav.find((item) => item.key === 'support');
-
-    return [
-        {
-            key: 'docs',
-            label: trans('Docs'),
-            icon: SolarBookOpen,
-            href: docsUrl(page.props.docsUrl),
-            external: true,
-        },
-        ...(support
-            ? [
-                  {
-                      key: 'support',
-                      label: trans('Support'),
-                      icon: SolarSupport,
-                      href: support.path,
-                      external: false,
-                  },
-              ]
-            : []),
-    ];
-});
 
 type Box = { top: number; left: number; width: number; height: number };
 
@@ -676,90 +634,6 @@ const rowClass =
                             @click="unpin(workspace)"
                         >
                             <PinOff class="size-3.5" :stroke-width="1.75" />
-                        </button>
-                    </li>
-                </ul>
-            </section>
-            <section
-                v-if="!collapsed"
-                class="mt-4 mb-2 px-2"
-                aria-labelledby="sidebar-support"
-            >
-                <h2 id="sidebar-support" class="mb-0.5">
-                    <button
-                        type="button"
-                        class="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px]/4 text-(--ds-text-faint) transition-colors hover:text-(--ds-text-secondary)"
-                        :class="focusRing"
-                        :aria-expanded="isOpen('help')"
-                        @click="toggleGroup('help')"
-                    >
-                        {{ $t('Help') }}
-                        <svg
-                            viewBox="0 0 8 8"
-                            class="size-2 transition-transform duration-150"
-                            :class="{ '-rotate-90': !isOpen('help') }"
-                            aria-hidden="true"
-                        >
-                            <path d="M1 2.5h6L4 6z" fill="currentColor" />
-                        </svg>
-                    </button>
-                </h2>
-                <ul v-if="isOpen('help')" class="flex flex-col gap-0.5">
-                    <li v-for="link in supportLinks" :key="link.key">
-                        <a
-                            v-if="link.external"
-                            :href="link.href"
-                            target="_blank"
-                            rel="noopener"
-                            class="group/link px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
-                            :class="[rowClass, focusRing]"
-                        >
-                            <component
-                                :is="link.icon"
-                                class="size-[15px] shrink-0 text-(--ds-text-muted)"
-                                :stroke-width="1.6"
-                            />
-                            {{ link.label }}
-                            <ArrowUpRight
-                                class="ml-auto size-3.5 text-(--ds-text-faint) opacity-0 group-hover/link:opacity-100"
-                                :stroke-width="1.75"
-                            />
-                        </a>
-                        <Link
-                            v-else
-                            :href="link.href"
-                            class="px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
-                            :class="[rowClass, focusRing]"
-                        >
-                            <component
-                                :is="link.icon"
-                                class="size-[15px] shrink-0 text-(--ds-text-muted)"
-                                :stroke-width="1.6"
-                            />
-                            {{ link.label }}
-                        </Link>
-                    </li>
-                    <li>
-                        <button
-                            type="button"
-                            class="cursor-pointer px-2.5 text-(--ds-text-secondary) hover:bg-(--ds-hover) hover:text-(--ds-text)"
-                            :class="[rowClass, focusRing]"
-                            @click="whatsNew.show()"
-                        >
-                            <SolarWhatsNew
-                                class="size-[15px] shrink-0 text-(--ds-text-muted)"
-                                :stroke-width="1.6"
-                            />
-                            {{ $t('What’s new') }}
-                            <span
-                                v-if="whatsNew.unread.value"
-                                class="ml-auto rounded-full bg-(--ds-blue) px-1.5 font-ui-mono text-[10px]/4 text-white"
-                                >{{
-                                    whatsNew.unread.value > 9
-                                        ? '9+'
-                                        : whatsNew.unread.value
-                                }}</span
-                            >
                         </button>
                     </li>
                 </ul>
