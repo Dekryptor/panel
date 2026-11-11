@@ -8,11 +8,29 @@ export const planNames: Record<PlanKey, string> = {
     business: trans('Business'),
 };
 
-export const planPrices: Record<PlanKey, string> = {
-    starter: '£5',
-    pro: '£9',
-    business: '£19',
+export type Pricing = {
+    currency: string;
+    symbol: string;
+    plans: Partial<
+        Record<PlanKey, { monthly: number | null; annual: number | null }>
+    >;
+    mcpPack: number | null;
 };
+
+export function monthlyPrice(
+    pricing: Pricing | null | undefined,
+    plan: PlanKey,
+): string | null {
+    const minor = pricing?.plans[plan]?.monthly;
+    if (!pricing || minor === null || minor === undefined) return null;
+
+    const amount = minor / 100;
+
+    return (
+        pricing.symbol +
+        (Number.isInteger(amount) ? String(amount) : amount.toFixed(2))
+    );
+}
 
 export const planRows: { label: string; values: Record<PlanKey, string> }[] = [
     {

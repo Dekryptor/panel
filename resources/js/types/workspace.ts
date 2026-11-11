@@ -94,8 +94,8 @@ export type Plan = {
     value: PlanKey;
     label: string;
     summary: string;
-    monthlyPrice: number;
-    annualPrice: number;
+    monthlyPrice: number | null;
+    annualPrice: number | null;
     machineLimit: number | null;
     mcpCallLimit: number;
     monitorLimit: number;
@@ -114,7 +114,7 @@ export type McpCallsUsage = {
     unlimited: boolean;
     resetsAt: string;
     packCalls: number;
-    packPrice: number;
+    packPrice: number | null;
     currency: string;
     maxPacks: number;
 };

@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Workspaces\CreateWorkspace;
+use App\Enums\BillingInterval;
 use App\Enums\Feature;
 use App\Enums\Plan;
 use App\Events\WorkspaceCreated;
@@ -39,6 +41,45 @@ class ExtensionsTestMiddleware
         $response->headers->set('X-Extension-Middleware', 'ran');
 
         return $response;
+    }
+}
+
+class ExtensionsTestTrialCards implements TrialCards
+{
+    /** @var list<array{int, bool}> */
+    public array $assigned = [];
+
+    public bool $awaiting = false;
+
+    public function assign(User $owner, Workspace $workspace): void
+    {
+        $this->assigned[] = [$owner->id, $workspace->exists];
+        $workspace->name = 'Picked for a card';
+    }
+
+    public function needsCard(Workspace $workspace): bool
+    {
+        return false;
+    }
+
+    public function awaitingFirstCharge(Workspace $workspace): bool
+    {
+        return $this->awaiting;
+    }
+
+    public function trialDays(Workspace $workspace): int
+    {
+        return 0;
+    }
+
+    public function verifyPath(Workspace $workspace): ?string
+    {
+        return null;
+    }
+
+    public function checkout(Workspace $workspace, Plan $plan, BillingInterval $interval, User $by, string $returnUrl): string
+    {
+        return 'https://checkout.test';
     }
 }
 
@@ -232,9 +273,34 @@ test('there are only five middleware slots', function () {
     app(Extensions::class)->addMiddleware('docs', ExtensionsTestMiddleware::class);
 })->throws(InvalidArgumentException::class);
 
+test('a package’s trial cards see a new trial workspace before it’s saved, and only that one', function () {
+    $cards = new ExtensionsTestTrialCards;
+    app()->instance(TrialCards::class, $cards);
+    $owner = User::factory()->create();
+
+    $workspace = app(CreateWorkspace::class)->create($owner);
+    $second = app(CreateWorkspace::class)->create($owner->fresh(), name: 'Second');
+
+    expect($cards->assigned)->toBe([[$owner->id, false]])
+        ->and($workspace->name)->toBe('Picked for a card')
+        ->and($second->name)->toBe('Second');
+});
+
+test('a trial past its end keeps its plan only while a package says its first charge is on the way', function () {
+    $cards = new ExtensionsTestTrialCards;
+    app()->instance(TrialCards::class, $cards);
+    $workspace = Workspace::factory()->trialExpired()->create();
+
+    expect($workspace->effectivePlan())->toBeNull();
+
+    $cards->awaiting = true;
+    expect($workspace->effectivePlan())->toBe(Workspace::TRIAL_PLAN)
+        ->and(Workspace::factory()->onPlan(Plan::Essential)->create()->effectivePlan())->toBe(Plan::Essential);
+});
+
 test('with no package asking for a card, the welcome flow never does', function () {
     app()->instance(TrialCards::class, new NoTrialCards);
-    $workspace = Workspace::factory()->welcoming()->create(['signup_variant' => 'card']);
+    $workspace = Workspace::factory()->welcoming()->create();
 
     $this->actingAs($workspace->owner)
         ->get(workspaceUrlForExtensions($workspace, '/welcome'))

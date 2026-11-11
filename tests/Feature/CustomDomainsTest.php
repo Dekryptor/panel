@@ -15,6 +15,7 @@ use App\Support\Extensions\Extensions;
 use App\Support\Extensions\SignInHooks;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -352,6 +353,18 @@ test('account settings on a domain open on ours, and the dashboard stays there',
 
     session()->flush();
     $this->actingAs($user)->get("{$sub}/settings/api")->assertOk();
+});
+
+test('a package’s account routes on a domain open on ours too', function () {
+    [$workspace] = domainWorkspace();
+    liveDomain($workspace);
+    Route::middleware('web')->get('/extension-account', fn () => 'here')->name('extension.account');
+    $main = rtrim(config('app.url'), '/');
+
+    $this->actingAs($workspace->owner)->get('https://ops.acme.test/extension-account')->assertOk()->assertSee('here');
+
+    app(Extensions::class)->addAccountRoutes(['extension.account']);
+    $this->actingAs($workspace->owner)->get('https://ops.acme.test/extension-account')->assertRedirect("{$main}/extension-account");
 });
 
 test('signing in on a domain doesn’t remember the browser', function () {

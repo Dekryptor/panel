@@ -54,8 +54,8 @@ const props = defineProps<{
     plans: {
         key: PlanKey;
         label: string;
-        monthly: number;
-        annual: number;
+        monthly: number | null;
+        annual: number | null;
         machines: number | null;
     }[];
     trialDays: number;
@@ -244,9 +244,13 @@ function saveControl(): void {
 
 const plan = ref<PlanKey>(props.answers.plan ?? props.recommended);
 const interval = ref<Interval>(props.answers.interval);
+const hasPrices = props.plans.some(
+    (entry) => entry.monthly !== null || entry.annual !== null,
+);
 
-function price(entry: (typeof props.plans)[number]): string {
+function price(entry: (typeof props.plans)[number]): string | null {
     const minor = interval.value === 'annual' ? entry.annual : entry.monthly;
+    if (minor === null) return null;
 
     return new Intl.NumberFormat('en-GB', {
         style: 'currency',
@@ -957,6 +961,7 @@ onBeforeUnmount(() =>
 
                         <div class="flex flex-col gap-3">
                             <div
+                                v-if="hasPrices"
                                 class="ds-segments w-full!"
                                 role="group"
                                 :aria-label="$t('Billing period')"
@@ -1017,6 +1022,7 @@ onBeforeUnmount(() =>
                                         </span>
                                     </span>
                                     <span
+                                        v-if="price(entry) !== null"
                                         class="flex shrink-0 items-baseline gap-0.5 whitespace-nowrap"
                                     >
                                         <span

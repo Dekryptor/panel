@@ -2,13 +2,13 @@
 
 namespace App\Enums;
 
+use App\Support\Extensions\Prices;
+
 enum Plan: string
 {
     case Essential = 'starter';
     case Pro = 'pro';
     case Business = 'business';
-
-    public const int ANNUAL_MONTHS_CHARGED = 10;
 
     public function label(): string
     {
@@ -17,37 +17,6 @@ enum Plan: string
             self::Pro => 'Pro',
             self::Business => 'Business',
         };
-    }
-
-    public function monthlyPrice(Currency $currency = Currency::GBP): int
-    {
-        return match ($currency) {
-            Currency::GBP => match ($this) {
-                self::Essential => 500,
-                self::Pro => 900,
-                self::Business => 1900,
-            },
-            Currency::USD => match ($this) {
-                self::Essential => 600,
-                self::Pro => 1200,
-                self::Business => 2400,
-            },
-            Currency::EUR => match ($this) {
-                self::Essential => 600,
-                self::Pro => 1000,
-                self::Business => 2200,
-            },
-        };
-    }
-
-    public function annualPrice(Currency $currency = Currency::GBP): int
-    {
-        return $this->monthlyPrice($currency) * self::ANNUAL_MONTHS_CHARGED;
-    }
-
-    public function price(BillingInterval $interval, Currency $currency = Currency::GBP): int
-    {
-        return $interval === BillingInterval::Annual ? $this->annualPrice($currency) : $this->monthlyPrice($currency);
     }
 
     public function machineLimit(): ?int
@@ -201,15 +170,17 @@ enum Plan: string
         });
     }
 
-    /** @return array{value: string, label: string, summary: string, monthlyPrice: int, annualPrice: int, machineLimit: int|null, mcpCallLimit: int, monitorLimit: int, minMonitorInterval: int, logRetentionDays: int, logLinesPerDay: int, activityRetentionDays: int, features: list<string>} */
+    /** @return array{value: string, label: string, summary: string, monthlyPrice: int|null, annualPrice: int|null, machineLimit: int|null, mcpCallLimit: int, monitorLimit: int, minMonitorInterval: int, logRetentionDays: int, logLinesPerDay: int, activityRetentionDays: int, features: list<string>} */
     public function toPageProps(Currency $currency = Currency::GBP): array
     {
+        $prices = app(Prices::class);
+
         return [
             'value' => $this->value,
             'label' => $this->label(),
             'summary' => $this->summary(),
-            'monthlyPrice' => $this->monthlyPrice($currency),
-            'annualPrice' => $this->annualPrice($currency),
+            'monthlyPrice' => $prices->plan($this, BillingInterval::Monthly, $currency),
+            'annualPrice' => $prices->plan($this, BillingInterval::Annual, $currency),
             'machineLimit' => $this->machineLimit(),
             'mcpCallLimit' => $this->mcpCallLimit(),
             'monitorLimit' => $this->monitorLimit(),

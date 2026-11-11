@@ -27,8 +27,14 @@ $this->app->make(Extensions::class)->routes(Extensions::WORKSPACE, function () {
 | `Extensions::WEB`        | At the end of `routes/web.php`                             | The main domain, with the `web` middleware group.                                                                                                    |
 | `Extensions::API`        | At the end of `routes/api.php`                             | The `api` prefix and middleware group. Add `AuthenticateApiKey` yourself for the public API.                                                         |
 | `Extensions::ADMIN`      | At the end of the admin group in `routes/web.php`          | Prefix `admin`, names `admin.*`, signed in, verified and `can:viewAdmin`.                                                                            |
-| `Extensions::MCP`        | With the OAuth server's routes in `routes/mcp.php`         | The `api` group and `McpCors`, every host (a package's own OAuth metadata).                                                                          |
+| `Extensions::MCP`        | In `routes/mcp.php`, ahead of the workspace subdomains     | The `api` group and `McpCors`, every host (a package's own OAuth metadata, or an MCP server on its own subdomain, like `docs.`).                     |
 | `Extensions::SUBDOMAINS` | In `routes/web.php`, ahead of the workspace subdomains     | The `web` middleware group. For sites on their own subdomain (`Route::domain('docs.'.config('app.domain'))`), so the name never reaches a workspace. |
+
+On a workspace's own domain, account pages (profile, security, accepting an invitation) open on our domain instead, so a session there never changes the account. Name a package's account routes the same way:
+
+```php
+$extensions->addAccountRoutes(['referrals.apply']);
+```
 
 Register from the provider's `boot()`: the route files load after every provider has booted. Not from `register()`: package providers register before the panel's AppServiceProvider makes Extensions a singleton, so what they add there is lost. Use controllers, not closures, so `route:cache` keeps working.
 
@@ -69,7 +75,7 @@ $extensions->addSettingsItem(new SettingsItem(
 ));
 ```
 
-`after` names the item it goes after; `before` names one it goes before, which wins when that item shows (Billing uses `after: 'members', before: 'settings'`, so it sits after Partners when that shows too).
+`after` names the item it goes after; `before` names one it goes before, which wins when that item shows (Billing uses `after: 'members', before: 'settings'`). In the sidebar, Settings stays last in its group. A page in an item's `components` that isn't one of the top tabs shows the item's label as its breadcrumb.
 
 Only the items whose `visible` check passes are shared with the page, as the `extensions` prop on workspace pages. Labels are in English and translated when shared. Icons are names from `resources/js/lib/extensionIcons.ts`; add one there if you need it. Sidebar groups are `start`, `servers`, `operations`, `workspace` and `menu`. Settings groups are `workspace`, `machines`, `developers` and `account`.
 
@@ -182,13 +188,18 @@ Whether a new signup's trial has to add a card before its dashboard opens is ask
 $this->app->singleton(TrialCards::class, CheckoutTrialCards::class);
 ```
 
+- `assign($owner, $workspace)`: called while a new trial workspace is made, before it's saved, when its owner made it. The package sets whatever it keeps on the workspace (its own columns, from its own migrations) to decide later whether a card is needed.
+- `needsCard($workspace)`: whether the welcome flow and dashboard wait for a card.
+- `awaitingFirstCharge($workspace)`: whether a trial that added a card is past its end but not charged yet, so it keeps its trial plan until the charge lands.
+- `trialDays`, `verifyPath` and `checkout`: what the welcome flow's card step shows and where it sends people.
+
 While the welcome flow confirms a trial's card, back from checkout, it says what `resources/js/lib/trialCards.ts` gives it: the default words, or a package's own `resources/js/trialCards.ts` (its default export, a `TrialCardsCopy`), which can name its checkout. The strings are in English and go through `$t`.
 
 ## How a plan is paid for
 
 The panel keeps a workspace's plan, trial and allowances, but never talks to a payment provider. What it needs to know about a subscription it asks `App\Support\Extensions\Billing`:
 
-- `isBilled($workspace)`: whether a subscription pays for the plan right now (active, or a payment that's late), so a card trial waiting on its first charge keeps its plan.
+- `isBilled($workspace)`: whether a subscription pays for the plan right now (active, or a payment that's late).
 - `currency($workspace)`: the currency the subscription is charged in, so prices show in it (`Currency::forWorkspace`); null goes by the visitor.
 - `summary($workspace)`: what the workspace's pages are told (`Workspace::billingSummary`): the subscription's status, whether there's a portal to manage it in, and the contract it's on, if any.
 
@@ -196,6 +207,30 @@ The panel binds `NoBilling` (nothing is billed); a package with a checkout binds
 
 ```php
 $this->app->singleton(Billing::class, LedgerBilling::class);
+```
+
+## What a plan costs
+
+The panel knows each plan's limits and features but not its price. Where it shows one (the welcome flow's plan step, `Plan::toPageProps`, `McpUsage::summary`), it asks `App\Support\Extensions\Prices`, in minor units:
+
+- `plan($plan, $interval, $currency)`: what the plan costs for a month or a year.
+- `mcpPack($currency)`: what a pack of `McpUsage::PACK_CALLS` AI tool calls costs.
+
+The panel binds `NoPrices`, which returns null, and pages then leave the price out. A package with prices binds its own from `register()`, and can share them on every page as `pricing` (`currency`, `symbol`, `plans.<plan>.monthly` and `.annual`, `mcpPack`), which the upgrade dialog shows when it's there:
+
+```php
+$this->app->singleton(Prices::class, ListPrices::class);
+$extensions->addSharedProps(fn (Request $request) => [
+    'pricing' => fn () => ListPrices::forPage(Currency::forVisitor($request)),
+]);
+```
+
+## Docs for Ask AI
+
+Ask AI in the panel adds the docs pages that best match the question to its prompt. It asks `App\Support\Extensions\DocsSource` for them: `search($question, $limit)` returns a list of `['title' => ..., 'url' => ..., 'body' => ...]` (the body in Markdown), best first. The panel binds `NoDocs`, which finds nothing, and the prompt then has no docs. A package with docs binds its own from `register()`:
+
+```php
+$this->app->singleton(DocsSource::class, SearchedDocs::class);
 ```
 
 ## Parts of panel pages

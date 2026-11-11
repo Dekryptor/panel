@@ -17,9 +17,13 @@ use App\Support\Entitlements\Entitlements;
 use App\Support\Entitlements\PlanEntitlements;
 use App\Support\Entitlements\SelfHostedEntitlements;
 use App\Support\Extensions\Billing;
+use App\Support\Extensions\DocsSource;
 use App\Support\Extensions\Extensions;
 use App\Support\Extensions\NoBilling;
+use App\Support\Extensions\NoDocs;
+use App\Support\Extensions\NoPrices;
 use App\Support\Extensions\NoTrialCards;
+use App\Support\Extensions\Prices;
 use App\Support\Extensions\TrialCards;
 use App\Support\Licensing\CommunityLicense;
 use App\Support\Mail\BrandMail;
@@ -62,6 +66,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(Extensions::class);
         $this->app->singletonIf(TrialCards::class, NoTrialCards::class);
         $this->app->singletonIf(Billing::class, NoBilling::class);
+        $this->app->singletonIf(DocsSource::class, NoDocs::class);
+        $this->app->singletonIf(Prices::class, NoPrices::class);
     }
 
     public function boot(): void

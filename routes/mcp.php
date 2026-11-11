@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Mcp\DocsMcpController;
 use App\Http\Controllers\Mcp\McpController;
 use App\Http\Controllers\Mcp\OAuthMetadataController;
 use App\Http\Controllers\Mcp\OAuthRegistrationController;
@@ -11,12 +10,7 @@ use App\Support\Extensions\Extensions;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(McpCors::class)->group(function () {
-    Route::domain('docs.'.config('app.domain'))->group(function () {
-        Route::post('mcp', DocsMcpController::class)->name('docs.mcp');
-        Route::match(['get', 'delete'], 'mcp', [DocsMcpController::class, 'stream']);
-        Route::options('mcp', fn () => response('', 204));
-        Route::get('.well-known/mcp/server-card.json', [ServerCardController::class, 'docs'])->name('docs.mcp.server-card');
-    });
+    app(Extensions::class)->loadRoutes(Extensions::MCP);
 
     Route::domain('{workspace:slug}.'.config('app.domain'))->group(function () {
         Route::post('mcp', McpController::class)->name('mcp');
@@ -26,8 +20,6 @@ Route::middleware(McpCors::class)->group(function () {
         Route::get('.well-known/oauth-protected-resource/mcp', [OAuthMetadataController::class, 'resource'])->name('mcp.resource-metadata');
         Route::get('.well-known/oauth-protected-resource', [OAuthMetadataController::class, 'resource']);
     });
-
-    app(Extensions::class)->loadRoutes(Extensions::MCP);
 
     Route::get('.well-known/mcp/server-card.json', [ServerCardController::class, 'workspace'])->name('mcp.server-card');
 

@@ -11,9 +11,11 @@ use RuntimeException;
 
 interface TrialCards
 {
-    public function assign(User $owner): ?string;
+    public function assign(User $owner, Workspace $workspace): void;
 
     public function needsCard(Workspace $workspace): bool;
+
+    public function awaitingFirstCharge(Workspace $workspace): bool;
 
     public function trialDays(Workspace $workspace): int;
 

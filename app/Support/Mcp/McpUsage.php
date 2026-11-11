@@ -5,22 +5,13 @@ namespace App\Support\Mcp;
 use App\Enums\Currency;
 use App\Models\McpCallPack;
 use App\Models\Workspace;
+use App\Support\Extensions\Prices;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 class McpUsage
 {
     public const int PACK_CALLS = 1000;
-
-    public const int PACK_PRICE = 500;
-
-    public static function packPrice(Currency $currency = Currency::GBP): int
-    {
-        return match ($currency) {
-            Currency::GBP => self::PACK_PRICE,
-            Currency::USD, Currency::EUR => 600,
-        };
-    }
 
     public const int MAX_PACKS = 10;
 
@@ -83,7 +74,7 @@ class McpUsage
             ->decrement('calls', 1, ['updated_at' => now()]);
     }
 
-    /** @return array{used: int, included: int|null, extra: int, limit: int|null, unlimited: bool, resetsAt: string, packCalls: int, packPrice: int, currency: string, maxPacks: int} */
+    /** @return array{used: int, included: int|null, extra: int, limit: int|null, unlimited: bool, resetsAt: string, packCalls: int, packPrice: int|null, currency: string, maxPacks: int} */
     public static function summary(Workspace $workspace, Currency $currency = Currency::GBP): array
     {
         $included = $workspace->mcpCallLimit();
@@ -97,7 +88,7 @@ class McpUsage
             'unlimited' => $included === null,
             'resetsAt' => self::resetsAt()->toIso8601String(),
             'packCalls' => self::PACK_CALLS,
-            'packPrice' => self::packPrice($currency),
+            'packPrice' => app(Prices::class)->mcpPack($currency),
             'currency' => $currency->value,
             'maxPacks' => self::MAX_PACKS,
         ];

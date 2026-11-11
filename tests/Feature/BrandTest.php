@@ -1,7 +1,5 @@
 <?php
 
-use App\Mail\DocumentsEmail;
-use App\Models\DocumentSend;
 use App\Models\User;
 use App\Notifications\MonitorAlert;
 use App\Support\Workflows\AgentSpec;
@@ -32,11 +30,6 @@ test('an install that names nobody shows no company or terms, and signs its emai
         ->not->toContain('ServerOS Cloud Ltd')
         ->not->toContain('serveros.com');
 
-    $send = new DocumentSend(['subject' => 'Your DPA', 'message' => 'Here it is.', 'documents' => [], 'bcc' => []]);
-    [$html, $text] = (fn () => $this->renderForAssertions())->call(new DocumentsEmail($send));
-    expect(trim($text))->toEndWith("--\nServerOS")
-        ->and($html)->not->toContain('Shelton Street');
-
     expect(AgentSpec::script())->toContain('user.email="${SERVEROS_AGENT_AUTHOR_EMAIL:-agent@panel.example.com}"')
         ->not->toContain('agent@serveros.com');
 });
@@ -52,10 +45,6 @@ test('a company, its address and its terms show where serveros.com’s always di
         ->where('brand', ['company' => 'Example Hosting Ltd', 'terms' => '/terms', 'privacy' => 'https://example.com/privacy', 'source' => null]));
 
     expect(brandFooter())->toContain('Example Hosting Ltd &middot; <a href="https://panel.example.com" style="color:#5E5E6A; text-decoration:none;">example.com</a>');
-
-    $send = new DocumentSend(['subject' => 'Your DPA', 'message' => 'Here it is.', 'documents' => [], 'bcc' => []]);
-    [, $text] = (fn () => $this->renderForAssertions())->call(new DocumentsEmail($send));
-    expect(trim($text))->toEndWith("--\nExample Hosting Ltd · 1 Example Street, London");
 
     expect(AgentSpec::script())->toContain('${SERVEROS_AGENT_AUTHOR_EMAIL:-bot@example.com}');
 });

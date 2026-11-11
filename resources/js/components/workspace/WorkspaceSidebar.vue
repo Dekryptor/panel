@@ -88,14 +88,13 @@ const ORDER = [
     'Workflows',
     'Members',
     'Billing',
-    'Partners',
     'Settings',
 ];
 
 function rank(item: WorkspaceNavItem): number {
     const index = ORDER.findIndex((label) => trans(label) === item.label);
 
-    return index === -1 ? ORDER.length : index;
+    return index === -1 ? ORDER.indexOf('Settings') - 0.5 : index;
 }
 
 type Group = { key: string; label: string | null; rows: Row[] };

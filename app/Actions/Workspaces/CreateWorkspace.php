@@ -32,7 +32,7 @@ class CreateWorkspace
         $first = Edition::selfHosted() ? Workspace::query()->where('owner_id', $owner->id)->doesntExist() : $trial;
         $workspace->onboarded_at = $first && $selfMade ? null : now();
         if ($trial && $selfMade) {
-            $workspace->signup_variant = app(TrialCards::class)->assign($owner);
+            app(TrialCards::class)->assign($owner, $workspace);
         }
         $workspace->owner()->associate($owner);
         $workspace->save();

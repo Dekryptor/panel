@@ -4,26 +4,27 @@ use App\Mcp\McpContext;
 use App\Mcp\McpServer;
 use App\Mcp\Scopes;
 use App\Mcp\ToolRegistry;
-use App\Models\DocPage;
-use App\Models\DocSection;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceAiKey;
 use App\Support\Assistant\AssistantAgent;
-use App\Support\Docs\DocsSearch;
+use App\Support\Extensions\DocsSource;
+use App\Support\Extensions\NoDocs;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
 
 function assistantDocs(): void
 {
-    $guides = DocSection::query()->create(['title' => 'Guides', 'slug' => 'guides', 'position' => 0]);
-    DocPage::query()->create(['doc_section_id' => $guides->id, 'group' => 'Deploying', 'title' => 'Domains and HTTPS', 'slug' => 'domains-and-https',
-        'description' => 'Point a domain at your machine.', 'body' => 'Add an A record pointing the domain at your machine.', 'position' => 0, 'published' => true]);
-    DocPage::query()->create(['doc_section_id' => $guides->id, 'group' => 'Deploying', 'title' => 'Databases', 'slug' => 'databases',
-        'description' => 'Run a database.', 'body' => 'Apps connect through 172.17.0.1.', 'position' => 1, 'published' => true]);
-    DocPage::query()->create(['doc_section_id' => $guides->id, 'group' => 'Deploying', 'title' => 'Secret draft', 'slug' => 'draft',
-        'description' => null, 'body' => 'domain domain domain', 'position' => 2, 'published' => false]);
+    app()->instance(DocsSource::class, new class implements DocsSource
+    {
+        public function search(string $question, int $limit): array
+        {
+            return str_contains($question, 'domain')
+                ? [['title' => 'Domains and HTTPS', 'url' => 'https://docs.example.com/guides/domains-and-https', 'body' => 'Add an A record pointing the domain at your machine.']]
+                : [];
+        }
+    });
 }
 
 /** @return list<array<string, mixed>> */
@@ -74,7 +75,6 @@ test('Ask AI answers from matching docs, with its tools, and streams what it doe
         return $request['messages'][0]['role'] === 'system'
             && str_contains($system, 'Add an A record pointing the domain')
             && str_contains($system, '/guides/domains-and-https')
-            && ! str_contains($system, 'Secret draft')
             && in_array('list_templates', $tools, true)
             && in_array('load_tools', $tools, true)
             && ! str_contains($system, 'create_machine_group')
@@ -340,10 +340,18 @@ test('Ask AI says so when it is not set up, or is out of messages', function () 
     $this->actingAs($workspace->owner)->postJson($url, ['message' => ''])->assertUnprocessable();
 });
 
-test('docs search ranks title matches first and skips drafts', function () {
-    assistantDocs();
+test('with no docs installed Ask AI still answers, and its prompt has no docs section', function () {
+    config()->set('services.groq.key', 'test-key');
+    config()->set('services.groq.model', 'openai/gpt-oss-120b');
+    app()->instance(DocsSource::class, new NoDocs);
+    Http::fake(['api.groq.com/*' => Http::response(groqTurn('Add an A record.'))]);
+    $workspace = Workspace::factory()->create();
 
-    expect(app(DocsSearch::class)->search('connect to my database')->pluck('slug')->all())->toBe(['databases'])
-        ->and(app(DocsSearch::class)->search('domain')->pluck('slug')->all())->toBe(['domains-and-https'])
-        ->and(app(DocsSearch::class)->search('the and for'))->toBeEmpty();
+    $response = $this->actingAs($workspace->owner)->post('https://'.$workspace->host().'/assistant', ['message' => 'How do I point my domain at an app?']);
+
+    $response->assertOk();
+    expect(array_column(assistantEvents($response->streamedContent()), 'text'))->toBe(['Add an A record.']);
+
+    Http::assertSent(fn (Request $request) => ! str_contains($request['messages'][0]['content'], 'Docs that match the question')
+        && str_contains($request['messages'][0]['content'], 'Every other tool, by group'));
 });

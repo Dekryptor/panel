@@ -81,6 +81,9 @@ final class Extensions
     /** @var list<string> */
     private array $mainDomainRoutes = [];
 
+    /** @var list<string> */
+    private array $accountRoutes = [];
+
     /** @var array<string, AdminNavItem> */
     private array $adminNav = [];
 
@@ -193,6 +196,18 @@ final class Extensions
     public function mainDomainRoutes(): array
     {
         return $this->mainDomainRoutes;
+    }
+
+    /** @param  list<string>  $routeNames */
+    public function addAccountRoutes(array $routeNames): void
+    {
+        $this->accountRoutes = array_values(array_unique([...$this->accountRoutes, ...$routeNames]));
+    }
+
+    /** @return list<string> */
+    public function accountRoutes(): array
+    {
+        return $this->accountRoutes;
     }
 
     public function addAdminNavItem(AdminNavItem $item): void

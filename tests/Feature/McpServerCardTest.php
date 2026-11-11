@@ -14,11 +14,3 @@ test('serveros.com has an MCP server card listing every tool of the workspace se
         ->assertJsonCount($count, 'tools')
         ->assertJsonStructure(['tools' => [['name', 'title', 'description', 'inputSchema', 'annotations']]]);
 });
-
-test('the docs have their own card, for the open docs server', function () {
-    $this->getJson('https://docs.'.config('app.domain').'/.well-known/mcp/server-card.json')
-        ->assertOk()
-        ->assertJsonPath('name', 'serveros-docs')
-        ->assertJsonPath('authentication.required', false)
-        ->assertJsonPath('remotes.0.url', 'https://docs.'.config('app.domain').'/mcp');
-});

@@ -20,7 +20,7 @@ use App\Models\ProjectNode;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Ai\AiProviders;
-use App\Support\Docs\DocsSearch;
+use App\Support\Extensions\DocsSource;
 use App\Support\Fixes\FixAllowance;
 use App\Support\Projects\ProjectActions;
 use Illuminate\Support\Facades\Cache;
@@ -84,7 +84,7 @@ class AssistantAgent
         private readonly AiProviders $providers,
         private readonly ToolRegistry $registry,
         private readonly McpServer $server,
-        private readonly DocsSearch $docs,
+        private readonly DocsSource $docs,
     ) {}
 
     /** @return array<string, mixed> */
@@ -642,12 +642,13 @@ class AssistantAgent
         $asked = array_values(array_filter($this->chat['messages'], fn (array $m) => $m['role'] === 'user'));
         $question = implode("\n", array_column(array_slice($asked, -2), 'content'));
         $budget = self::DOCS_CHARS;
-        $docs = $this->docs->search($question, 2)->map(function ($page) use (&$budget) {
-            $body = Str::limit($page->body, max(0, $budget), "\n[…]");
+        $docs = collect($this->docs->search($question, 2))->map(function (array $page) use (&$budget) {
+            $body = Str::limit($page['body'], max(0, $budget), "\n[…]");
             $budget -= strlen($body);
 
-            return "### {$page->title}\nURL: ".DocsSearch::url($page)."\n\n{$body}";
+            return "### {$page['title']}\nURL: {$page['url']}\n\n{$body}";
         })->filter()->implode("\n\n---\n\n");
+        $docs = $docs === '' ? '' : "\n\nDocs that match the question:\n\n{$docs}";
         $now = now()->utc()->format('D j M Y, H:i');
 
         return <<<PROMPT
@@ -678,7 +679,7 @@ How to work:
 
 How to answer:
 - Short and plain: a sentence or two, or a short list. Once you've done something, say what you did and where to see it.
-- Name panel pages and buttons in bold. Link docs pages only with the docs URLs below. No headings, no filler, no em dashes.
+- Name panel pages and buttons in bold. Link docs pages only with the docs URLs given here, if any. No headings, no filler, no em dashes.
 - Never paste raw JSON, job ids or tool output: say it in words. The steps already show what you ran, each with a link to its page.
 - Passwords and keys a deploy generated are shown only once: give them in a code span and say to keep them somewhere safe.
 
@@ -691,11 +692,7 @@ About the person:
 {$machines}
 
 Every other tool, by group (load_tools to use them):
-{$catalogue}
-
-Docs that match the question:
-
-{$docs}
+{$catalogue}{$docs}
 PROMPT;
     }
 

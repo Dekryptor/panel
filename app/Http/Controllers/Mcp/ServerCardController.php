@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Mcp;
 
 use App\Http\Controllers\Controller;
-use App\Mcp\Docs\DocsMcpServer;
 use App\Mcp\McpServer;
 use App\Mcp\Tool;
 use App\Mcp\ToolRegistry;
@@ -47,31 +46,8 @@ class ServerCardController extends Controller
         ]);
     }
 
-    public function docs(): JsonResponse
-    {
-        $domain = (string) config('app.domain');
-
-        return self::card([
-            'name' => DocsMcpServer::NAME,
-            'title' => 'ServerOS docs',
-            'version' => McpServer::VERSION,
-            'description' => 'Search and read the ServerOS docs: guides for connecting machines, deploying, backups, monitoring, OS updates, workflows and the API. No sign-in.',
-            'websiteUrl' => 'https://docs.'.$domain,
-            'documentationUrl' => 'https://docs.'.$domain.'/guides/ai-apps',
-            'serverInfo' => ['name' => DocsMcpServer::NAME, 'title' => 'ServerOS docs', 'version' => McpServer::VERSION],
-            'remotes' => [[
-                'type' => 'streamable-http',
-                'url' => 'https://docs.'.$domain.'/mcp',
-                'supportedProtocolVersions' => McpServer::VERSIONS,
-            ]],
-            'capabilities' => ['tools' => ['listChanged' => false]],
-            'authentication' => ['required' => false, 'schemes' => []],
-            'tools' => DocsMcpServer::tools(),
-        ]);
-    }
-
     /** @param  array<string, mixed>  $card */
-    private static function card(array $card): JsonResponse
+    public static function card(array $card): JsonResponse
     {
         return response()->json($card, 200, [
             'Access-Control-Allow-Origin' => '*',

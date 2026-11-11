@@ -85,7 +85,6 @@ test('the first account on a self-hosted install is its verified owner, with a w
     expect($owner->hasVerifiedEmail())->toBeTrue()
         ->and($owner->trial_used_at)->toBeNull()
         ->and($workspace->trial_ends_at)->toBeNull()
-        ->and($workspace->signup_variant)->toBeNull()
         ->and($workspace->onboarded_at)->toBeNull()
         ->and($workspace->isActive())->toBeTrue()
         ->and($workspace->billingSummary())->toMatchArray(['plan' => null, 'onTrial' => false, 'selfHosted' => true]);
@@ -153,14 +152,16 @@ function cardAlwaysNeeded(): void
 {
     app()->instance(TrialCards::class, new class implements TrialCards
     {
-        public function assign(User $owner): ?string
-        {
-            return 'card';
-        }
+        public function assign(User $owner, Workspace $workspace): void {}
 
         public function needsCard(Workspace $workspace): bool
         {
             return true;
+        }
+
+        public function awaitingFirstCharge(Workspace $workspace): bool
+        {
+            return false;
         }
 
         public function trialDays(Workspace $workspace): int

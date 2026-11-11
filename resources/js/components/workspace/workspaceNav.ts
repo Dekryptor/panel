@@ -69,7 +69,6 @@ export type WorkspaceNavGroup =
 export function useWorkspaceNav(): ComputedRef<WorkspaceNavItem[]> {
     const page = usePage<{
         workspace?: Workspace;
-        isPartner?: boolean;
         extensions?: { nav: ExtensionNavItem[] } | null;
     }>();
 

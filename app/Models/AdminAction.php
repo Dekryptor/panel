@@ -35,9 +35,6 @@ class AdminAction extends Model
     public const array TARGETS = [
         'user' => User::class,
         'workspace' => Workspace::class,
-        'doc_page' => DocPage::class,
-        'doc_section' => DocSection::class,
-        'document_template' => DocumentTemplate::class,
     ];
 
     public const int KEEP_DAYS = 730;
@@ -160,8 +157,6 @@ class AdminAction extends Model
 
         return (string) match (true) {
             $target instanceof User, $target instanceof Workspace => $target->name,
-            $target instanceof DocPage, $target instanceof DocSection => $target->title,
-            $target instanceof DocumentTemplate => $target->name,
             default => "#{$target->getKey()}",
         };
     }

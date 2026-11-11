@@ -15,6 +15,7 @@ use App\Support\Edition;
 use App\Support\Entitlements\Entitlements;
 use App\Support\Extensions\Billing;
 use App\Support\Extensions\Extensions;
+use App\Support\Extensions\TrialCards;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Database\Factories\WorkspaceFactory;
@@ -43,8 +44,6 @@ use Illuminate\Support\Facades\Storage;
  * @property CarbonImmutable|null $trial_reminded_1d_at
  * @property CarbonImmutable|null $trial_ended_emailed_at
  * @property CarbonImmutable|null $trial_emails_off_at
- * @property string|null $signup_variant
- * @property CarbonImmutable|null $card_added_at
  * @property string|null $plan_source
  * @property CarbonImmutable|null $manual_plan_until
  * @property int|null $machine_limit_override
@@ -119,7 +118,6 @@ class Workspace extends Model
             'trial_ended_emailed_at' => 'datetime',
             'trial_emails_off_at' => 'datetime',
             'trial_last_ends_at' => 'datetime',
-            'card_added_at' => 'datetime',
         ];
     }
 
@@ -402,7 +400,7 @@ class Workspace extends Model
 
     public function awaitingFirstCharge(): bool
     {
-        return $this->plan === null && $this->card_added_at !== null && app(Billing::class)->isBilled($this);
+        return $this->plan === null && app(TrialCards::class)->awaitingFirstCharge($this);
     }
 
     public function machineLimit(): ?int

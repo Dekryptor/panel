@@ -2,8 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Enums\Currency;
-use App\Enums\Plan;
 use App\Models\Workspace;
 use App\Support\Admin\Impersonation;
 use App\Support\Brand;
@@ -11,7 +9,6 @@ use App\Support\Docs\DocsUrl;
 use App\Support\Extensions\Extensions;
 use App\Support\Extensions\MarketingSite;
 use App\Support\GitHub\GitHubApp;
-use App\Support\Mcp\McpUsage;
 use App\Support\SetupGuide;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -70,19 +67,6 @@ class HandleInertiaRequests extends Middleware
             'brand' => Brand::shared(),
             'docsUrl' => DocsUrl::home(),
             'feedbackUrl' => Router::has('feedback.index') ? rtrim(route('feedback.index'), '/') : null,
-            'pricing' => function () use ($request): array {
-                $currency = Currency::forVisitor($request);
-
-                return [
-                    'currency' => $currency->value,
-                    'symbol' => $currency->symbol(),
-                    'plans' => collect(Plan::cases())->mapWithKeys(fn (Plan $plan) => [$plan->value => [
-                        'monthly' => $plan->monthlyPrice($currency),
-                        'annual' => $plan->annualPrice($currency),
-                    ]])->all(),
-                    'mcpPack' => McpUsage::packPrice($currency),
-                ];
-            },
             'auth' => [
                 'user' => $request->user(),
             ],

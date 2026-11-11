@@ -9,8 +9,8 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import AppButton from '@/components/workspace/AppButton.vue';
-import { planNames, planPrices, planRows } from '@/lib/planLocks';
-import type { LockedPlan, PlanKey } from '@/lib/planLocks';
+import { monthlyPrice, planNames, planRows } from '@/lib/planLocks';
+import type { LockedPlan, PlanKey, Pricing } from '@/lib/planLocks';
 import type { Workspace } from '@/types';
 
 const upgrade = useUpgradeLink();
@@ -22,13 +22,14 @@ const { feature, plan = 'pro' } = defineProps<{
     plan?: LockedPlan;
 }>();
 
-const page = usePage<{ workspace: Workspace }>();
+const page = usePage<{ workspace: Workspace; pricing?: Pricing | null }>();
 const current = computed<PlanKey | null>(() => {
     const value = page.props.workspace.billing.plan;
     return value === 'starter' || value === 'pro' || value === 'business'
         ? value
         : null;
 });
+const price = computed(() => monthlyPrice(page.props.pricing, plan));
 </script>
 
 <template>
@@ -45,11 +46,19 @@ const current = computed<PlanKey | null>(() => {
                 </DialogTitle>
                 <DialogDescription class="text-[13px]/5 text-(--ds-text-muted)">
                     {{
-                        $t(':feature come with :valueValue, :value2 a month.', {
-                            feature,
-                            valueValue: planNames[plan],
-                            value2: planPrices[plan],
-                        }) + ' '
+                        (price
+                            ? $t(
+                                  ':feature come with :valueValue, :value2 a month.',
+                                  {
+                                      feature,
+                                      valueValue: planNames[plan],
+                                      value2: price,
+                                  },
+                              )
+                            : $t(':feature come with :value', {
+                                  feature,
+                                  value: planNames[plan],
+                              }) + '.') + ' '
                     }}
                 </DialogDescription>
             </div>

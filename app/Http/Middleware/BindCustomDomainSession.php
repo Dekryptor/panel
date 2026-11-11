@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Support\Audit\AuditContext;
 use App\Support\Domains\CustomDomains;
+use App\Support\Extensions\Extensions;
 use Closure;
 use Illuminate\Auth\SessionGuard;
 use Illuminate\Http\Request;
@@ -54,8 +55,6 @@ class BindCustomDomainSession
         'invitations.show',
         'invitations.accept',
         'join-requests.show',
-        'partners.apply',
-        'partners.join',
     ];
 
     public function handle(Request $request, Closure $next): Response
@@ -71,7 +70,7 @@ class BindCustomDomainSession
         }
 
         $route = $request->route()?->getName();
-        if (in_array($route, [...self::ACCOUNT_ROUTES, ...self::WORKSPACE_ACCOUNT_ROUTES], true)) {
+        if (in_array($route, [...self::ACCOUNT_ROUTES, ...app(Extensions::class)->accountRoutes(), ...self::WORKSPACE_ACCOUNT_ROUTES], true)) {
             $slug = CustomDomains::resolve($host)['slug'] ?? '';
             $base = $slug !== '' && in_array($route, self::WORKSPACE_ACCOUNT_ROUTES, true)
                 ? 'https://'.$slug.'.'.config('app.domain')

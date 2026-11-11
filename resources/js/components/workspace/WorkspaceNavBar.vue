@@ -38,6 +38,7 @@ const page = usePage<{
     monitor?: { name: string };
     workflow?: { name: string };
     ticket?: { reference: string };
+    extensions?: { nav: { label: string; components: string[] }[] } | null;
 }>();
 const items = useWorkspaceNav();
 const fixes = computed(() =>
@@ -134,16 +135,12 @@ const crumbs = computed<Crumb[]>(() => {
         ];
     }
 
-    if (component === 'workspace/Billing') {
-        return [{ label: trans('Billing') }];
-    }
+    const extension = props.extensions?.nav.find((item) =>
+        item.components.includes(component),
+    );
 
-    if (component === 'workspace/Partners') {
-        return [{ label: trans('Partners') }];
-    }
-
-    if (component.startsWith('workspace/Support')) {
-        return [{ label: trans('Support') }];
+    if (extension && !tabs.value.some((tab) => tab.key === extension.label)) {
+        return [{ label: extension.label }];
     }
 
     return [];

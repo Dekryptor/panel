@@ -12,6 +12,7 @@ use App\Support\Audit\AuditContext;
 use App\Support\Audit\Audited;
 use App\Support\Audit\NotAudited;
 use App\Support\Edition;
+use App\Support\Extensions\Prices;
 use App\Support\Extensions\TrialCards;
 use App\Support\Machines\MachinePolicies;
 use Illuminate\Http\Client\ConnectionException;
@@ -29,7 +30,7 @@ class WorkspaceWelcomeController extends Controller
 
     public const array SERVERS = ['1', '2-5', '6-20', '20+'];
 
-    public function __construct(private readonly TrialCards $cards) {}
+    public function __construct(private readonly TrialCards $cards, private readonly Prices $prices) {}
 
     public function show(Request $request, Workspace $workspace): Response|RedirectResponse
     {
@@ -56,8 +57,8 @@ class WorkspaceWelcomeController extends Controller
             'plans' => array_map(fn (Plan $plan) => [
                 'key' => $plan->value,
                 'label' => $plan->label(),
-                'monthly' => $plan->monthlyPrice($currency),
-                'annual' => $plan->annualPrice($currency),
+                'monthly' => $this->prices->plan($plan, BillingInterval::Monthly, $currency),
+                'annual' => $this->prices->plan($plan, BillingInterval::Annual, $currency),
                 'machines' => $plan->machineLimit(),
             ], Plan::cases()),
             'currency' => $currency->value,
