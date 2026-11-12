@@ -27,6 +27,11 @@ class SocialAccount extends Model
         ));
     }
 
+    public static function googleIdentityButton(): bool
+    {
+        return (bool) config('services.google.identity_button') && in_array('google', self::enabled(), true);
+    }
+
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
