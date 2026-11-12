@@ -32,6 +32,13 @@ class SocialAccount extends Model
         return (bool) config('services.google.identity_button') && in_array('google', self::enabled(), true);
     }
 
+    public static function googleIdentityClientId(string $host): ?string
+    {
+        return self::googleIdentityButton() && $host === config('app.domain')
+            ? (string) config('services.google.client_id')
+            : null;
+    }
+
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {

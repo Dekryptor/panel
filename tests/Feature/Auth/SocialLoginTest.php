@@ -266,6 +266,11 @@ test('the login page gets the Google client id only when Google and its button a
     $this->get(route('login'))->assertInertia(fn ($page) => $page->where('googleClientId', null));
 });
 
+test('the Google button stays off the sign-in page on a workspace address, which Google has no origin for', function () {
+    $this->get('https://acme.'.config('app.domain').'/login')->assertInertia(fn ($page) => $page->where('googleClientId', null));
+    $this->get('https://'.config('app.domain').'/login')->assertInertia(fn ($page) => $page->where('googleClientId', 'id'));
+});
+
 test('a Google credential is refused while the button is off', function () {
     config()->set('services.google.identity_button', false);
 
